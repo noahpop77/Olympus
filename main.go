@@ -27,7 +27,7 @@ func initDB() {
 		log.Fatalf("Error setting WAL mode: %v", err)
 	}
 
-	_, err = sqliteDB.Exec("PRAGMA busy_timeout = 5000;") // Wait for up to 5 seconds
+	_, err = sqliteDB.Exec("PRAGMA busy_timeout = 10000;")
 	if err != nil {
 		log.Fatalf("Error setting busy timeout: %v", err)
 	}

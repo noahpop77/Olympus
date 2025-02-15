@@ -1,22 +1,17 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  postgres:
-    image: postgres:14
-    environment:
-      POSTGRES_USER: sawa
-      POSTGRES_PASSWORD: sawa
-      POSTGRES_DB: mtrack
+  webapp:
+    image: golang:1.23-alpine  # Use an official Go image
+    container_name: olympus
     ports:
-      - "5432:5432"
+      - "8080:8080"  # Map port 8080 of the container to port 8080 of the host
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./dbScripts/PostgreSQL/init.sql:/docker-entrypoint-initdb.d/init.sql
-
-
-  #m-track:
-  #  image: golang:latest
-
-volumes:
-  postgres-data:
-    driver: local
+      - .:/app  # Mount the current directory to /app inside the container
+    working_dir: /app  # Set the working directory to /app
+    environment:
+      - CGO_ENABLED=1
+    command: > 
+      sh -c "
+      apk update && apk add sqlite-dev gcc libc-dev && go run .
+      "
