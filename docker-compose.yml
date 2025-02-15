@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: sawa
+      POSTGRES_PASSWORD: sawa
+      POSTGRES_DB: mtrack
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./dbScripts/PostgreSQL/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+
+  #m-track:
+  #  image: golang:latest
+
+volumes:
+  postgres-data:
+    driver: local
