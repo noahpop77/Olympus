@@ -1,10 +1,10 @@
 package main
 
 import (
+	"Olympus/endpoints"
 	"context"
 	"fmt"
 	"log"
-	"m-track-go/endpoints"
 	"net/http"
 
 	"github.com/jackc/pgx/v4/pgxpool"
