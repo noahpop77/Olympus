@@ -1,0 +1,45 @@
+---
+- name: Deploy and run Go project on multiple servers
+  hosts: 
+    - server1
+    - server2
+  gather_facts: false
+
+  tasks:
+    - name: Ensure old project files are removed
+      ansible.builtin.file:
+        path: /home/username/go/project
+        state: absent
+
+    - name: Copy Go project repo to remote server
+      ansible.builtin.copy:
+        src: /path/to/current/go/project
+        dest: /home/username/go/project
+        mode: '0755'
+
+    - name: Install Go (if not already installed)
+      ansible.builtin.shell:
+        cmd: |
+          if ! command -v go &> /dev/null
+          then
+            echo "Go could not be found. Installing Go..."
+            wget https://golang.org/dl/go1.18.linux-amd64.tar.gz -O /tmp/go1.18.linux-amd64.tar.gz
+            sudo tar -C /usr/local -xvzf /tmp/go1.18.linux-amd64.tar.gz
+            echo "export PATH=\$PATH:/usr/local/go/bin" >> ~/.bashrc
+            source ~/.bashrc
+          fi
+      become: true
+      when: ansible_facts.packages['go'] is not defined
+
+    - name: Build Go project on remote server
+      ansible.builtin.shell:
+        cmd: |
+          cd /home/username/go/project
+          go build -o myapp .
+
+    - name: Run Go project on remote server
+      ansible.builtin.shell:
+        cmd: "/home/username/go/project/myapp"
+
+# Command:
+# ansible-playbook deploy_go_project.yml -i inventory.ini
