@@ -14,20 +14,25 @@ import (
 
 var sqliteDB *sql.DB
 
-// Initialize the database connection pool
 func initDB() {
-	// var err error
-	// dbpool, err = pgxpool.Connect(context.Background(), "postgres://sawa:sawa@localhost:5432/mtrack")
-	// if err != nil {
-	// 	log.Fatalf("Unable to connect to database: %v\n", err)
-	// }
-
 	var err error
 	sqliteDB, err = sql.Open("sqlite3", "mtrack.db")
+	fmt.Println("Connection to sqlite open")
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	_, err = sqliteDB.Exec("PRAGMA journal_mode = WAL;")
+	if err != nil {
+		log.Fatalf("Error setting WAL mode: %v", err)
+	}
+
+	_, err = sqliteDB.Exec("PRAGMA busy_timeout = 5000;") // Wait for up to 5 seconds
+	if err != nil {
+		log.Fatalf("Error setting busy timeout: %v", err)
+	}
+
+	fmt.Println("Creating matchHistory")
 	sqliteDB.Exec(`CREATE TABLE "matchHistory" (
 		"gameID"                VARCHAR(16) NOT NULL,
 		"gameVer"               VARCHAR(16) NOT NULL,
@@ -41,13 +46,17 @@ func initDB() {
 		"matchData"             JSON NOT NULL,
 		CONSTRAINT unique_pair_index UNIQUE ("gameID", "riotID")
 	);`)
+	fmt.Println("Created matchHistory")
 
+	fmt.Println("Creating riotIDData")
 	sqliteDB.Exec(`CREATE TABLE "riotIDData" (
 		"riotID" VARCHAR(25) NOT NULL,
 		"puuid"  VARCHAR(100) NOT NULL,
 		PRIMARY KEY ("riotID")
 	);`)
+	fmt.Println("Created riotIDData")
 
+	fmt.Println("Creating summonerRankedInfo")
 	sqliteDB.Exec(`CREATE TABLE "summonerRankedInfo" (
 		"encryptedPUUID" VARCHAR(100) NOT NULL,
 		"summonerID"     VARCHAR(100) NOT NULL,
@@ -60,6 +69,7 @@ func initDB() {
 		"losses"         VARCHAR(45) NOT NULL,
 		PRIMARY KEY ("encryptedPUUID")
 	);`)
+	fmt.Println("Created summonerRankedInfo")
 
 	if err != nil {
 		log.Fatal(err)
@@ -71,6 +81,7 @@ func initDB() {
 func main() {
 	// Initialize the database connection
 	initDB()
+	defer sqliteDB.Close()
 
 	// Set up your handlers
 	http.HandleFunc("/printJson", func(writer http.ResponseWriter, requester *http.Request) {
@@ -89,11 +100,12 @@ func main() {
 ===================================`)
 
 	// Start the server
-	port := ":80"
+	port := ":8080"
 	fmt.Printf("Starting server on port %s...\n", port)
 	fmt.Println("===================================")
+
 	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatalf("Error starting server: %v\n", err)
 	}
-	sqliteDB.Close()
+
 }
