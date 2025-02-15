@@ -2,15 +2,13 @@ package endpoints
 
 import (
 	"compress/gzip"
-	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	_ "net/http/pprof" // Import pprof package
 	"time"
-
-	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 // Modify PrintJsonHandler to accept the dbpool as a parameter
@@ -122,7 +120,7 @@ func UnixToDateString(epoch int64) string {
 	return t.Format("2006-01-02")
 }
 
-func InsertIntoDatabase(writer http.ResponseWriter, requester *http.Request, dbpool *pgxpool.Pool) {
+func InsertIntoDatabase(writer http.ResponseWriter, requester *http.Request, sqliteDB *sql.DB) {
 	if requester.Method != http.MethodPost {
 		http.Error(writer, "Only POST method is allowed", http.StatusMethodNotAllowed)
 		return
@@ -171,9 +169,6 @@ func InsertIntoDatabase(writer http.ResponseWriter, requester *http.Request, dbp
 		return
 	}
 
-
-
-
 	riotID := fmt.Sprintf("%s#%s", gameData.Info.Participants[0].RiotIDGameName, gameData.Info.Participants[0].RiotIDTagline)
 	matchData, err := json.Marshal(gameData.Info.Participants)
 	if err != nil {
@@ -187,9 +182,7 @@ func InsertIntoDatabase(writer http.ResponseWriter, requester *http.Request, dbp
 		return
 	}
 
-	
-
-	_, err = dbpool.Exec(context.Background(),
+	_, err = sqliteDB.Exec(
 		`INSERT INTO "matchHistory" ("gameID", "gameVer", "riotID", "gameDurationMinutes", "gameCreationTimestamp", "gameEndTimestamp", "queueType", "gameDate", "participants", "matchData") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT ("gameID", "riotID") DO NOTHING;`,
 		gameData.Metadata.MatchID,
 		gameData.Info.GameVersion,
