@@ -212,7 +212,8 @@ func InsertIntoDatabase(writer http.ResponseWriter, requester *http.Request, sql
 		return
 	}
 
+	fmt.Println("DB Insert")
 	// Respond with a 200 OK
 	writer.WriteHeader(http.StatusOK)
-	// writer.Write([]byte("Inserted into database successfully"))
+	writer.Write([]byte("Inserted into database successfully"))
 }
