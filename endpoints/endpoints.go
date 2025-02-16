@@ -2,37 +2,16 @@ package endpoints
 
 import (
 	"compress/gzip"
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	_ "net/http/pprof" // Import pprof package
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
-
-// Modify PrintJsonHandler to accept the dbpool as a parameter
-func PrintJsonHandler(writer http.ResponseWriter, requester *http.Request) {
-	if requester.Method != http.MethodPost {
-		http.Error(writer, "Only POST method is allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Read the body of the request
-	body, err := io.ReadAll(requester.Body)
-	if err != nil {
-		http.Error(writer, "Failed to read request body", http.StatusInternalServerError)
-		return
-	}
-	defer requester.Body.Close()
-
-	// Print the body to the console
-	fmt.Printf("Received JSON body: %s\n", string(body))
-
-	// Respond with a 200 OK
-	writer.WriteHeader(http.StatusOK)
-	writer.Write([]byte("Received successfully"))
-}
 
 // Main JSON object
 type GameData struct {
@@ -120,7 +99,30 @@ func UnixToDateString(epoch int64) string {
 	return t.Format("2006-01-02")
 }
 
-func InsertIntoDatabase(writer http.ResponseWriter, requester *http.Request, sqliteDB *sql.DB) {
+// Modify PrintJsonHandler to accept the dbpool as a parameter
+func PrintJsonHandler(writer http.ResponseWriter, requester *http.Request) {
+	if requester.Method != http.MethodPost {
+		http.Error(writer, "Only POST method is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Read the body of the request
+	body, err := io.ReadAll(requester.Body)
+	if err != nil {
+		http.Error(writer, "Failed to read request body", http.StatusInternalServerError)
+		return
+	}
+	defer requester.Body.Close()
+
+	// Print the body to the console
+	fmt.Printf("Received JSON body: %s\n", string(body))
+
+	// Respond with a 200 OK
+	writer.WriteHeader(http.StatusOK)
+	writer.Write([]byte("Received successfully"))
+}
+
+func InsertIntoDatabase(writer http.ResponseWriter, requester *http.Request, rdb *redis.Client, ctx context.Context) {
 	if requester.Method != http.MethodPost {
 		http.Error(writer, "Only POST method is allowed", http.StatusMethodNotAllowed)
 		return
@@ -161,7 +163,6 @@ func InsertIntoDatabase(writer http.ResponseWriter, requester *http.Request, sql
 		fmt.Println("Raw Error parsing JSON:", err)
 		return
 	}
-
 	var gameData GameData
 	err = json.Unmarshal([]byte(rawJSON), &gameData)
 	if err != nil {
@@ -169,51 +170,25 @@ func InsertIntoDatabase(writer http.ResponseWriter, requester *http.Request, sql
 		return
 	}
 
-	riotID := fmt.Sprintf("%s#%s", gameData.Info.Participants[0].RiotIDGameName, gameData.Info.Participants[0].RiotIDTagline)
-	matchData, err := json.Marshal(gameData.Info.Participants)
-	if err != nil {
-		fmt.Println("Error marshalling struct:", err)
+	val, err := rdb.Get(ctx, gameData.Metadata.MatchID).Result()
+	if err != nil && err != redis.Nil {
+		panic(err)
+	}
+	
+	if err == redis.Nil {
+		//string(body) is the stringified JSON payload sent to the endpoint
+		err = rdb.Set(ctx, gameData.Metadata.MatchID, string(body), 0).Err()
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("Redis Cache Miss")
+		writer.WriteHeader(http.StatusOK)
+		writer.Write(body)
+		return
+	} else {
+		fmt.Println("Redis Cache Hit")
+		writer.WriteHeader(http.StatusOK)
+		writer.Write([]byte(val))
 		return
 	}
-
-	participantData, err := json.Marshal(gameData.Metadata.Participants)
-	if err != nil {
-		fmt.Println("Error marshalling struct:", err)
-		return
-	}
-
-	_, err = sqliteDB.Exec(
-		`INSERT INTO "matchHistory" ("gameID", "gameVer", "riotID", "gameDurationMinutes", "gameCreationTimestamp", "gameEndTimestamp", "queueType", "gameDate", "participants", "matchData") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT ("gameID", "riotID") DO NOTHING;`,
-		gameData.Metadata.MatchID,
-		gameData.Info.GameVersion,
-		riotID,
-		GetGameTime(gameData.Info.GameDuration),
-		fmt.Sprintf("%d", gameData.Info.GameCreation),
-		fmt.Sprintf("%d", gameData.Info.GameEndTimestamp),
-		"Ranked Solo/Duo",
-		UnixToDateString(gameData.Info.GameCreation),
-		string(participantData),
-		string(matchData),
-	)
-
-	// fmt.Println(gameData.Info.GameID)
-	// fmt.Println(gameData.Info.GameVersion)
-	// fmt.Println(riotID)
-	// fmt.Println(GetGameTime(gameData.Info.GameDuration))
-	// fmt.Println(gameData.Info.GameCreation)
-	// fmt.Println(gameData.Info.GameEndTimestamp)
-	// fmt.Println(UnixToDateString(gameData.Info.GameCreation))
-	// fmt.Println(string(participantData))
-	// fmt.Println(string(matchData))
-
-	if err != nil {
-		fmt.Println(err)
-		http.Error(writer, "Database error", http.StatusInternalServerError)
-		return
-	}
-
-	fmt.Println("DB Insert")
-	// Respond with a 200 OK
-	writer.WriteHeader(http.StatusOK)
-	writer.Write([]byte("Inserted into database successfully"))
 }
