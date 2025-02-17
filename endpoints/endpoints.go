@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	_ "net/http/pprof" // Import pprof package
-	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -85,43 +84,6 @@ type Selection struct {
 	Perk string `json:"perk"`
 }
 
-func GetGameTime(durationInSeconds int) string {
-	minutes := durationInSeconds / 60
-	seconds := durationInSeconds % 60
-	formattedTime := fmt.Sprintf("%02d:%02d", minutes, seconds)
-	return formattedTime
-}
-
-func UnixToDateString(epoch int64) string {
-	// Convert the epoch time to a time.Time object
-	t := time.Unix(epoch/1000, 0)
-	// Format the time object as "year-month-day"
-	return t.Format("2006-01-02")
-}
-
-// Modify PrintJsonHandler to accept the dbpool as a parameter
-func PrintJsonHandler(writer http.ResponseWriter, requester *http.Request) {
-	if requester.Method != http.MethodPost {
-		http.Error(writer, "Only POST method is allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Read the body of the request
-	body, err := io.ReadAll(requester.Body)
-	if err != nil {
-		http.Error(writer, "Failed to read request body", http.StatusInternalServerError)
-		return
-	}
-	defer requester.Body.Close()
-
-	// Print the body to the console
-	fmt.Printf("Received JSON body: %s\n", string(body))
-
-	// Respond with a 200 OK
-	writer.WriteHeader(http.StatusOK)
-	writer.Write([]byte("Received successfully"))
-}
-
 func InsertIntoDatabase(writer http.ResponseWriter, requester *http.Request, rdb *redis.Client, ctx context.Context) {
 	if requester.Method != http.MethodPost {
 		http.Error(writer, "Only POST method is allowed", http.StatusMethodNotAllowed)
@@ -174,7 +136,7 @@ func InsertIntoDatabase(writer http.ResponseWriter, requester *http.Request, rdb
 	if err != nil && err != redis.Nil {
 		panic(err)
 	}
-	
+
 	if err == redis.Nil {
 		//string(body) is the stringified JSON payload sent to the endpoint
 		err = rdb.Set(ctx, gameData.Metadata.MatchID, string(body), 0).Err()

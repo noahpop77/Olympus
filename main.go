@@ -15,17 +15,12 @@ import (
 func main() {
 
 	ctx := context.Background()
-	
-	rdb := redis.NewClient(&redis.Options{
-		Addr:	  "localhost:6379",
-		Password: "", // no password set
-		DB:		  0,  // use default DB
-	})
 
-	// // Set up your handlers
-	// http.HandleFunc("/printJson", func(writer http.ResponseWriter, requester *http.Request) {
-	// 	endpoints.PrintJsonHandler(writer, requester)
-	// })
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
 
 	http.HandleFunc("/addMatch", func(writer http.ResponseWriter, requester *http.Request) {
 		endpoints.InsertIntoDatabase(writer, requester, rdb, ctx)
