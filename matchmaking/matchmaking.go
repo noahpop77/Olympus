@@ -64,7 +64,7 @@ func PartyHandler(w http.ResponseWriter, r *http.Request, rdb *redis.Client, ctx
 		}
 		
 		// Inner participant info
-		err = rdb.HSet(ctx, participantKey, "riotName", request.Participants[0].RiotName, "riotTag", request.Participants[0].RiotTagLine, "rank", request.Participants[0].Rank, "puuid", request.Participants[0].Puuid).Err()
+		err = rdb.HSet(ctx, participantKey, "riotName", request.Participants[0].RiotName, "riotTag", request.Participants[0].RiotTagLine, "rank", request.Participants[0].Rank, "role", request.Participants[0].Role, "puuid", request.Participants[0].Puuid).Err()
 		if err != nil {
 			log.Fatalf("could not set participant info: %v", err)
 		}

@@ -9,7 +9,8 @@ message Participant {
     string riotName = 1;
     string riotTagLine = 2;
     string rank = 3;
-    string puuid = 4;
+    string role = 4;
+    string puuid = 5;
 }
 
 message PartyRequest {
