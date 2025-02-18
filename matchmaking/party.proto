@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package party;
+
+// The go_package option specifies the import path for the generated Go code.
+option go_package = "./matchmaking/party";
+
+message Participant {
+    string riotName = 1;
+    string riotTagLine = 2;
+    string rank = 3;
+    string puuid = 4;
+}
+
+message PartyRequest {
+    string partyId = 1;
+    string teamCount = 2;
+    int32 queueType = 3;
+    repeated Participant participants = 4;  // List of participants
+}
