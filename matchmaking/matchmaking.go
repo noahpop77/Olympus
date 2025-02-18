@@ -34,39 +34,41 @@ func PartyHandler(w http.ResponseWriter, r *http.Request, rdb *redis.Client, ctx
 		http.Error(w, "Failed to unmarshal Protobuf data", http.StatusBadRequest)
 		return
 	}
-	
-	// fmt.Println(&request)
 
 	val, err := rdb.Get(ctx, request.PartyId).Result()
 	if err != nil && err != redis.Nil {
 		panic(err)
 	}
 
-	// Set the HSET commands
-	// Party Info
-	soloID := request.PartyId + ":1"
-	err = rdb.HSet(ctx, soloID, "partyId", request.PartyId, "teamCount", request.TeamCount, "queueType", request.QueueType).Err()
-	if err != nil {
-		log.Fatalf("could not set party info: %v", err)
-	}
 
-	// Participant Info
-	err = rdb.HSet(ctx, request.PartyId + ":participants:1", 
-		"riotName", request.Participants[0].RiotName, 
-		"riotTag", request.Participants[0].RiotTagLine, 
-		"rank", request.Participants[0].Rank, 
-		"puuid", request.Participants[0].Puuid).Err()
-	if err != nil {
+	// Participants hash key
+	participantKey := request.PartyId + ":participants:1"
+	
+	// Party information hash key
+	partyKey := request.PartyId + ":1"
+
+	// Searches for the riotName of the user sending the matchmaking request in that party code
+	// Does it exist?
+	err = rdb.HGet(ctx, participantKey, "riotName").Err()
+	if err != nil && err != redis.Nil {
 		log.Fatalf("could not set participant info: %v", err)
 	}
-	// fmt.Println("Participant info set successfully")
 
+	// If it doesnt exist, set the party information and the participant information within that party else we hit the cache so ezpz.
 	if err == redis.Nil {
-		//string(body) is the stringified JSON payload sent to the endpoint
-		err = rdb.Set(ctx, request.PartyId, string(data), 0).Err()
+
+		// Outer party info
+		err = rdb.HSet(ctx, partyKey, "partyId", request.PartyId, "teamCount", request.TeamCount, "queueType", request.QueueType).Err()
 		if err != nil {
-			panic(err)
+			log.Fatalf("could not set participant info: %v", err)
 		}
+		
+		// Inner participant info
+		err = rdb.HSet(ctx, participantKey, "riotName", request.Participants[0].RiotName, "riotTag", request.Participants[0].RiotTagLine, "rank", request.Participants[0].Rank, "puuid", request.Participants[0].Puuid).Err()
+		if err != nil {
+			log.Fatalf("could not set participant info: %v", err)
+		}
+
 		fmt.Println("Redis Cache Miss")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Party request received successfully - Redis Cache Miss"))
@@ -81,4 +83,3 @@ func PartyHandler(w http.ResponseWriter, r *http.Request, rdb *redis.Client, ctx
 	}
 	
 }
-//curl -X POST -H "Content-Type: application/x-protobuf" --data-binary @partyRequest.bin http://localhost:8080/party
