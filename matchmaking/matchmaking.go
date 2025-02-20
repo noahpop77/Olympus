@@ -139,9 +139,9 @@ func PartyHandler(w http.ResponseWriter, r *http.Request, rdb *redis.Client, ctx
 	}
 
 	if MatchmakingSelection(ctx, &request, rdb) {
-		w.Write([]byte("We found you a team!"))
+		w.Write([]byte("We found you a team!\n"))
 	} else {
-		w.Write([]byte("No team found in your rank range"))
+		w.Write([]byte("No team found in your rank range\n"))
 	}
 	
 }
