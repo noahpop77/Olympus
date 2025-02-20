@@ -30,7 +30,7 @@ func main() {
 	http.HandleFunc("/matchmaking", func(writer http.ResponseWriter, requester *http.Request) {
 		matchmaking.PartyHandler(writer, requester, rdb, ctx)
 	})
-	
+
 	fmt.Println(`
   ▗▖  ▗▖▗▄▄▄▖▗▄▄▖  ▗▄▖  ▗▄▄▖▗▖ ▗▖
   ▐▛▚▞▜▌  █  ▐▌ ▐▌▐▌ ▐▌▐▌   ▐▌▗▞▘

@@ -6,12 +6,80 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/noahpop77/Olympus/matchmaking/party"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 )
 
+func WithinRankRange (myRank, teamRank int) bool {
+	diff := myRank - teamRank
+	if diff < 4 && diff > -4 {
+		return true
+	} else {
+		return false
+	}
+}
+
+
+func MatchmakingSelection(ctx context.Context, request *party.PartyRequest, rdb *redis.Client) bool {
+
+	var matchedPlayers []string
+	var matchedPlayerRanks []string
+
+	keys, err := rdb.Keys(ctx,"*").Result()
+	if err != nil {
+		log.Fatalf("could not retrieve keys: %v", err)
+	}	
+
+	for _, key := range keys{
+
+		hashData, err := rdb.HGetAll(ctx, key).Result()
+		if err != nil {
+			log.Printf("failed to get hash data for key %s: %v", key, err)
+			continue
+		}
+		if len(hashData) == 0 {
+			// Skip if hash is empty.
+			continue
+		}
+
+		// Essentially builds a map out of data we receive and set the values of playerInfo with it
+		var playerInfo party.PartyRequest
+		playerInfo.Participants = make([]*party.Participant, 1)
+		playerInfo.Participants[0] = &party.Participant{
+			RiotName: hashData["riotName"],
+			RiotTagLine: hashData["riotTag"],
+			Rank: hashData["rank"],
+			Role: hashData["role"],
+			Puuid: hashData["puuid"],
+		}
+
+		// These gotta be ints
+		myRank, _ := strconv.Atoi(request.Participants[0].Rank)
+		teammateRank, _ := strconv.Atoi(playerInfo.Participants[0].Rank)
+		
+		// If its a valid rank we use it
+		if WithinRankRange(myRank, teammateRank) {
+			matchedPlayerRanks = append(matchedPlayerRanks, playerInfo.Participants[0].Rank)
+			matchedPlayers = append(matchedPlayers, playerInfo.Participants[0].Puuid)
+		}
+		
+		if len(matchedPlayers) == 9 {
+			fmt.Println("I AM RANK 18")
+			for i := 0; i < len(matchedPlayers); i++ {
+				fmt.Printf("Team Member %s:\t%d\t%s\t%s\n", strconv.Itoa(i), myRank, matchedPlayerRanks[i], matchedPlayers[i])
+			}
+
+			return true
+
+		} else {
+			continue
+		}
+	}
+	return false
+}
 
 func PartyHandler(w http.ResponseWriter, r *http.Request, rdb *redis.Client, ctx context.Context) {
 	// Check if it's a POST request
@@ -35,16 +103,8 @@ func PartyHandler(w http.ResponseWriter, r *http.Request, rdb *redis.Client, ctx
 		return
 	}
 
-	val, err := rdb.Get(ctx, request.PartyId).Result()
-	if err != nil && err != redis.Nil {
-		panic(err)
-	}
-
-
-	// Participants hash key
+	// Participants hash key & party information hash key
 	participantKey := request.PartyId + ":participants:1"
-	
-	// Party information hash key
 	partyKey := request.PartyId + ":1"
 
 	// Searches for the riotName of the user sending the matchmaking request in that party code
@@ -71,15 +131,17 @@ func PartyHandler(w http.ResponseWriter, r *http.Request, rdb *redis.Client, ctx
 
 		fmt.Println("Redis Cache Miss")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Party request received successfully - Redis Cache Miss"))
-		w.Write(data)
-		return
+		w.Write([]byte("Party request received successfully - Redis Cache Miss\n"))
 	} else {
 		fmt.Println("Redis Cache Hit")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Party request received successfully - Redis Cache Hit"))
-		w.Write([]byte(val))
-		return
+		w.Write([]byte("Party request received successfully - Redis Cache Hit\n"))
+	}
+
+	if MatchmakingSelection(ctx, &request, rdb) {
+		w.Write([]byte("We found you a team!"))
+	} else {
+		w.Write([]byte("No team found in your rank range"))
 	}
 	
 }
