@@ -23,7 +23,7 @@ func WithinRankRange (myRank, teamRank int) bool {
 }
 
 
-func MatchmakingSelection(ctx context.Context, request *party.PartyRequest, rdb *redis.Client) bool {
+func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.PartyRequest, rdb *redis.Client, ctx context.Context) {
 
 	var matchedPlayers []string
 	var matchedPlayerRanks []string
@@ -57,7 +57,7 @@ func MatchmakingSelection(ctx context.Context, request *party.PartyRequest, rdb 
 		}
 
 		// These gotta be ints
-		myRank, _ := strconv.Atoi(request.Participants[0].Rank)
+		myRank, _ := strconv.Atoi(unpackedRequest.Participants[0].Rank)
 		teammateRank, _ := strconv.Atoi(playerInfo.Participants[0].Rank)
 		
 		// If its a valid rank we use it
@@ -72,16 +72,21 @@ func MatchmakingSelection(ctx context.Context, request *party.PartyRequest, rdb 
 				fmt.Printf("Team Member %s:\t%d\t%s\t%s\n", strconv.Itoa(i), myRank, matchedPlayerRanks[i], matchedPlayers[i])
 			}
 
-			return true
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("Ranked team found!\n"))
+			return
 
 		} else {
 			continue
 		}
 	}
-	return false
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("No possible ranked team to be found...\n"))
 }
 
-func PartyHandler(w http.ResponseWriter, r *http.Request, rdb *redis.Client, ctx context.Context) {
+// Unpacks the sent in party datastructure which is a protobuff. Careful with the .proto file
+func UnpackRequest(w http.ResponseWriter, r *http.Request, unpackedRequest *party.PartyRequest) {
 	// Check if it's a POST request
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
@@ -96,20 +101,22 @@ func PartyHandler(w http.ResponseWriter, r *http.Request, rdb *redis.Client, ctx
 	}
 
 	// Unmarshal the Protobuf data into the PartyRequest struct
-	var request party.PartyRequest
-	err = proto.Unmarshal(data, &request)
+	err = proto.Unmarshal(data, unpackedRequest)
 	if err != nil {
 		http.Error(w, "Failed to unmarshal Protobuf data", http.StatusBadRequest)
 		return
 	}
+}
+
+func PartyHandler(w http.ResponseWriter, unpackedRequest *party.PartyRequest, rdb *redis.Client, ctx context.Context) {
 
 	// Participants hash key & party information hash key
-	participantKey := request.PartyId + ":participants:1"
-	partyKey := request.PartyId + ":1"
+	participantKey := unpackedRequest.PartyId + ":participants:1"
+	partyKey := unpackedRequest.PartyId + ":1"
 
 	// Searches for the riotName of the user sending the matchmaking request in that party code
 	// Does it exist?
-	err = rdb.HGet(ctx, participantKey, "riotName").Err()
+	err := rdb.HGet(ctx, participantKey, "riotName").Err()
 	if err != nil && err != redis.Nil {
 		log.Fatalf("could not set participant info: %v", err)
 	}
@@ -118,13 +125,13 @@ func PartyHandler(w http.ResponseWriter, r *http.Request, rdb *redis.Client, ctx
 	if err == redis.Nil {
 
 		// Outer party info
-		err = rdb.HSet(ctx, partyKey, "partyId", request.PartyId, "teamCount", request.TeamCount, "queueType", request.QueueType).Err()
+		err = rdb.HSet(ctx, partyKey, "partyId", unpackedRequest.PartyId, "teamCount", unpackedRequest.TeamCount, "queueType", unpackedRequest.QueueType).Err()
 		if err != nil {
 			log.Fatalf("could not set participant info: %v", err)
 		}
 		
 		// Inner participant info
-		err = rdb.HSet(ctx, participantKey, "riotName", request.Participants[0].RiotName, "riotTag", request.Participants[0].RiotTagLine, "rank", request.Participants[0].Rank, "role", request.Participants[0].Role, "puuid", request.Participants[0].Puuid).Err()
+		err = rdb.HSet(ctx, participantKey, "riotName", unpackedRequest.Participants[0].RiotName, "riotTag", unpackedRequest.Participants[0].RiotTagLine, "rank", unpackedRequest.Participants[0].Rank, "role", unpackedRequest.Participants[0].Role, "puuid", unpackedRequest.Participants[0].Puuid).Err()
 		if err != nil {
 			log.Fatalf("could not set participant info: %v", err)
 		}
@@ -136,12 +143,6 @@ func PartyHandler(w http.ResponseWriter, r *http.Request, rdb *redis.Client, ctx
 		fmt.Println("Redis Cache Hit")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Party request received successfully - Redis Cache Hit\n"))
-	}
-
-	if MatchmakingSelection(ctx, &request, rdb) {
-		w.Write([]byte("We found you a team!\n"))
-	} else {
-		w.Write([]byte("No team found in your rank range\n"))
 	}
 	
 }
