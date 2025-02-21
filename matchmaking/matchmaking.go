@@ -67,7 +67,7 @@ func MatchmakingSelection(ctx context.Context, request *party.PartyRequest, rdb 
 		}
 		
 		if len(matchedPlayers) == 9 {
-			fmt.Println("I AM RANK 18")
+			fmt.Println("I AM RANK " + strconv.Itoa(myRank))
 			for i := 0; i < len(matchedPlayers); i++ {
 				fmt.Printf("Team Member %s:\t%d\t%s\t%s\n", strconv.Itoa(i), myRank, matchedPlayerRanks[i], matchedPlayers[i])
 			}
