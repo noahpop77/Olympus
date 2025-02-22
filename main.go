@@ -40,13 +40,13 @@ func main() {
 		endpoints.InsertIntoDatabase(writer, requester, rdb, ctx)
 	})
 	http.HandleFunc("/queueUp", func(writer http.ResponseWriter, requester *http.Request) {
-		var unpackedRequest party.PartyRequest							// Sets API level state for queueing user
+		var unpackedRequest party.Players							// Sets API level state for queueing user
 		matchmaking.UnpackRequest(writer, requester, &unpackedRequest)	// Formats and unmarshals sent in data
 		matchmaking.PartyHandler(writer, &unpackedRequest, rdb, ctx)	// Adds player to redis DB with relevant info
 	})
 
 	http.HandleFunc("/matchmaking", func(writer http.ResponseWriter, requester *http.Request){
-		var unpackedRequest party.PartyRequest							// Sets API level state for queueing user
+		var unpackedRequest party.Players							// Sets API level state for queueing user
 		matchmaking.UnpackRequest(writer, requester, &unpackedRequest)	// Formats and unmarshals sent in data
 		matchmaking.MatchmakingSelection(writer, &unpackedRequest, rdb, ctx)	// Finds others of similar rank
 	})

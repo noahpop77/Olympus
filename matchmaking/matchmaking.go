@@ -23,7 +23,7 @@ func WithinRankRange (myRank, teamRank int) bool {
 }
 
 
-func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.PartyRequest, rdb *redis.Client, ctx context.Context) {
+func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) {
 
 	var matchedPlayers []string
 	var matchedPlayerRanks []string
@@ -41,29 +41,22 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.PartyReq
 			continue
 		}
 		if len(hashData) == 0 {
-			// Skip if hash is empty.
 			continue
 		}
 
 		// Essentially builds a map out of data we receive and set the values of playerInfo with it
-		var playerInfo party.PartyRequest
-		playerInfo.Participants = make([]*party.Participant, 1)
-		playerInfo.Participants[0] = &party.Participant{
-			RiotName: hashData["riotName"],
-			RiotTagLine: hashData["riotTag"],
-			Rank: hashData["rank"],
-			Role: hashData["role"],
-			Puuid: hashData["puuid"],
-		}
+		var playerInfo party.Players
+		playerInfo.Player1Puuid =  hashData["Player1Puuid"]
+		playerInfo.Player1Rank =  hashData["Player1Rank"]
 
 		// These gotta be ints
-		myRank, _ := strconv.Atoi(unpackedRequest.Participants[0].Rank)
-		teammateRank, _ := strconv.Atoi(playerInfo.Participants[0].Rank)
-		
+		myRank, _ := strconv.Atoi(unpackedRequest.Player1Rank)
+		teammateRank, _ := strconv.Atoi(playerInfo.Player1Rank)
+
 		// If its a valid rank we use it
 		if WithinRankRange(myRank, teammateRank) {
-			matchedPlayerRanks = append(matchedPlayerRanks, playerInfo.Participants[0].Rank)
-			matchedPlayers = append(matchedPlayers, playerInfo.Participants[0].Puuid)
+			matchedPlayerRanks = append(matchedPlayerRanks, playerInfo.Player1Rank)
+			matchedPlayers = append(matchedPlayers, playerInfo.Player1Puuid)
 		}
 		
 		if len(matchedPlayers) == 9 {
@@ -86,7 +79,7 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.PartyReq
 }
 
 // Unpacks the sent in party datastructure which is a protobuff. Careful with the .proto file
-func UnpackRequest(w http.ResponseWriter, r *http.Request, unpackedRequest *party.PartyRequest) {
+func UnpackRequest(w http.ResponseWriter, r *http.Request, unpackedRequest *party.Players) {
 	// Check if it's a POST request
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
@@ -108,15 +101,11 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request, unpackedRequest *part
 	}
 }
 
-func PartyHandler(w http.ResponseWriter, unpackedRequest *party.PartyRequest, rdb *redis.Client, ctx context.Context) {
-
-	// Participants hash key & party information hash key
-	participantKey := unpackedRequest.PartyId + ":participants:1"
-	partyKey := unpackedRequest.PartyId + ":1"
+func PartyHandler(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) {
 
 	// Searches for the riotName of the user sending the matchmaking request in that party code
 	// Does it exist?
-	err := rdb.HGet(ctx, participantKey, "riotName").Err()
+	err := rdb.HGet(ctx, unpackedRequest.PartyId, "PartyId").Err()
 	if err != nil && err != redis.Nil {
 		log.Fatalf("could not set participant info: %v", err)
 	}
@@ -125,17 +114,27 @@ func PartyHandler(w http.ResponseWriter, unpackedRequest *party.PartyRequest, rd
 	if err == redis.Nil {
 
 		// Outer party info
-		err = rdb.HSet(ctx, partyKey, "partyId", unpackedRequest.PartyId, "teamCount", unpackedRequest.TeamCount, "queueType", unpackedRequest.QueueType).Err()
+		err = rdb.HSet(ctx, unpackedRequest.PartyId, 
+			"PartyId", unpackedRequest.PartyId, 
+			"TeamCount", unpackedRequest.TeamCount, 
+			"QueueType", unpackedRequest.QueueType, 
+
+			"Player1Puuid", unpackedRequest.Player1Puuid, 
+			"Player1RiotName", unpackedRequest.Player1RiotName, 
+			"Player1RiotTagLine", unpackedRequest.Player1RiotTagLine, 
+			"Player1Rank", unpackedRequest.Player1Rank, 
+			"Player1Role", unpackedRequest.Player1Role, 
+
+			"Player2Puuid", unpackedRequest.Player2Puuid, 
+			"Player2RiotName", unpackedRequest.Player2RiotName, 
+			"Player2RiotTagLine", unpackedRequest.Player2RiotTagLine, 
+			"Player2Rank", unpackedRequest.Player2Rank, 
+			"Player2Role", unpackedRequest.Player2Role).Err()
+		
 		if err != nil {
 			log.Fatalf("could not set participant info: %v", err)
 		}
 		
-		// Inner participant info
-		err = rdb.HSet(ctx, participantKey, "riotName", unpackedRequest.Participants[0].RiotName, "riotTag", unpackedRequest.Participants[0].RiotTagLine, "rank", unpackedRequest.Participants[0].Rank, "role", unpackedRequest.Participants[0].Role, "puuid", unpackedRequest.Participants[0].Puuid).Err()
-		if err != nil {
-			log.Fatalf("could not set participant info: %v", err)
-		}
-
 		fmt.Println("Redis Cache Miss")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Party request received successfully - Redis Cache Miss\n"))

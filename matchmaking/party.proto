@@ -5,17 +5,19 @@ package party;
 // The go_package option specifies the import path for the generated Go code.
 option go_package = "./matchmaking/party";
 
-message Participant {
-    string riotName = 1;
-    string riotTagLine = 2;
-    string rank = 3;
-    string role = 4;
-    string puuid = 5;
-}
-
-message PartyRequest {
-    string partyId = 1;
-    string teamCount = 2;
-    int32 queueType = 3;
-    repeated Participant participants = 4;  // List of participants
+message Players {
+    string Player1riotName = 1;
+    string Player1riotTagLine = 2;
+    string Player1rank = 3;
+    string Player1role = 4;
+    string Player1puuid = 5;
+    string Player2riotName = 6;
+    string Player2riotTagLine = 7;
+    string Player2rank = 8;
+    string Player2role = 9;
+    string Player2puuid = 10;
+        
+    string partyId = 11;
+    string teamCount = 12;
+    int32 queueType = 13;
 }
