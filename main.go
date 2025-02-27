@@ -48,6 +48,7 @@ func main() {
 	http.HandleFunc("/matchmaking", func(writer http.ResponseWriter, requester *http.Request){
 		var unpackedRequest party.Players							// Sets API level state for queueing user
 		matchmaking.UnpackRequest(writer, requester, &unpackedRequest)	// Formats and unmarshals sent in data
+		matchmaking.SimulateQueueTimer(writer, requester, &unpackedRequest)
 		matchmaking.MatchmakingSelection(writer, &unpackedRequest, rdb, ctx)	// Finds others of similar rank
 	})
 
