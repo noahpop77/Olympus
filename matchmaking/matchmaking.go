@@ -23,7 +23,7 @@ func WithinRankRange(myRank, teamRank int) bool {
 
 // SimulateQueueTimer simulates a timer while the player is in queue.
 func SimulateQueueTimer(w http.ResponseWriter, r *http.Request, unpackedRequest *party.Players) {
-	for i := 1; i <= 10; i++ {
+	for i := 1; i <= 5; i++ {
 		time.Sleep(1 * time.Second)
 		if i%5 == 0 {
 			fmt.Printf("%s Queue Timer: %d\n", unpackedRequest.Player1RiotName, i)
@@ -71,33 +71,16 @@ func processParty(ctx context.Context, rdb *redis.Client, myRank int, key string
 			PlayerRank: playerRankStr,
 		})
 	}
-
-	// // Demonstration: update a field atomically using WATCH.
-	// txnFunc := func(tx *redis.Tx) error {
-	// 	pipe := tx.Pipeline()
-	// 	pipe.HSet(ctx, key, "Player2Puuid", "new_player_puuid")
-	// 	_, err := pipe.Exec(ctx)
-	// 	return err
-	// }
-
-	// // Retry mechanism to handle potential race conditions.
-	// for i := 0; i < 5; i++ {
-	// 	err = rdb.Watch(ctx, txnFunc, key)
-	// 	if err == nil {
-	// 		break
-	// 	}
-	// 	time.Sleep(100 * time.Millisecond)
-	// }
 	return err
 }
 
 // MatchmakingSelection concurrently processes all parties to build a matched team.
 // When a team is found (9 matches in addition to the initiating party), the corresponding Redis keys are deleted.
-func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) {
+func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) bool {
 	myRank, err := strconv.Atoi(unpackedRequest.Player1Rank)
 	if err != nil {
 		http.Error(w, "Invalid player rank", http.StatusBadRequest)
-		return
+		return false
 	}
 
 	var matches []matchedParty
@@ -128,7 +111,7 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 	}
 
 	if len(delKeys) != 9 {
-		return
+		return false
 	}
 
 	// Using DEL command to remove all selected parties.
@@ -144,12 +127,6 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 	var printMutex sync.Mutex
 	printMutex.Lock()
 	if len(matches) >= 9 {
-		// fmt.Println("\n-----------------------------------------------------")
-		// fmt.Printf("Querying User PUUID: %s\n", unpackedRequest.Player1Puuid)
-		// for i := 0; i < 9; i++ {
-		// 	fmt.Printf("Team Member %d:\tMy Rank: %d - %s : %s\n",
-		// 		i, myRank, matches[i].PlayerRank, matches[i].Puuid)
-		// }
 
 		var matchmadeTeam string
 		for i := 0; i < 9; i++ {
@@ -158,12 +135,12 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 		}
 		matchmadeTeam += fmt.Sprintf("ME           :  My Rank       %d : %s\n", myRank, unpackedRequest.Player1Puuid)
 
-		w.Write([]byte("Ranked team found!\n"))
 		w.Write([]byte(matchmadeTeam))
-	} else {
-		w.Write([]byte("No ranked team found...\n"))
+		return true
 	}
 	printMutex.Unlock()
+
+	return false
 }
 
 // UnpackRequest unpacks the Protobuf data into a party.Players structure.
@@ -181,6 +158,29 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request, unpackedRequest *part
 	if err != nil {
 		http.Error(w, "Failed to unmarshal Protobuf data", http.StatusBadRequest)
 		return
+	}
+}
+
+func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) {
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("Connection", "keep-alive")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	for {
+		time.Sleep(2 * time.Second)
+		lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.Player1RiotName)
+		w.Write([]byte(lfgResponse))
+		flusher.Flush()
+
+		if MatchmakingSelection(w, unpackedRequest, rdb, ctx) {
+			return
+		}
 	}
 }
 
@@ -214,16 +214,5 @@ func PartyHandler(w http.ResponseWriter, unpackedRequest *party.Players, rdb *re
 		if err != nil {
 			log.Fatalf("could not set participant info: %v", err)
 		}
-
-		// err = rdb.SAdd(ctx, "MatchmakingSet", unpackedRequest.PartyId).Err()
-		// if err != nil {
-		// 	log.Fatalf("Could not properly configure the matchmaking set: %v", err)
-		// }
-
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Player added to queue...\n"))
-	} else {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Player added to queue...\n"))
 	}
 }
