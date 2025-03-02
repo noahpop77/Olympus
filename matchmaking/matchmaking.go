@@ -77,20 +77,21 @@ func processParty(ctx context.Context, rdb *redis.Client, myRank int, key string
 // MatchmakingSelection concurrently processes all parties to build a matched team.
 // When a team is found (9 matches in addition to the initiating party), the corresponding Redis keys are deleted.
 func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) bool {
+	var matches []matchedParty
+	var mu sync.Mutex
+	
+	mu.Lock()
+
 	myRank, err := strconv.Atoi(unpackedRequest.Player1Rank)
 	if err != nil {
 		http.Error(w, "Invalid player rank", http.StatusBadRequest)
 		return false
 	}
 
-	var matches []matchedParty
-	var mu sync.Mutex
-
-	mu.Lock()
-
 	keys, err := rdb.Keys(ctx, "*").Result()
 	if err != nil {
 		log.Fatalf("could not retrieve keys: %v", err)
+		return false
 	}
 
 	// Process keys concurrently.
@@ -98,6 +99,7 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 		err := processParty(ctx, rdb, myRank, key, &matches)
 		if err != nil {
 			log.Printf("Error processing key %s: %v", key, err)
+			return false
 		}
 	}
 
@@ -114,18 +116,11 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 		return false
 	}
 
-	// Using DEL command to remove all selected parties.
 	if err := rdb.Del(ctx, delKeys...).Err(); err != nil {
 		log.Printf("Error deleting matched keys: %v", err)
+		return false
 	}
 
-	mu.Unlock()
-
-	// Check if we have reached the desired team size.
-	// Note: This example assumes that the initiating party is not part of the candidate list,
-	// so we need 9 additional players.
-	var printMutex sync.Mutex
-	printMutex.Lock()
 	if len(matches) >= 9 {
 
 		var matchmadeTeam string
@@ -138,10 +133,36 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 		w.Write([]byte(matchmadeTeam))
 		return true
 	}
-	printMutex.Unlock()
+	mu.Unlock()
 
 	return false
 }
+
+func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) {
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	for {
+		time.Sleep(2 * time.Second)
+		lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.Player1RiotName)
+		_, err := w.Write([]byte(lfgResponse))
+		if err != nil {
+			log.Printf("Client disconnected, stopping search for %s", unpackedRequest.Player1RiotName)
+			return
+		}
+		flusher.Flush()
+
+		if MatchmakingSelection(w, unpackedRequest, rdb, ctx) {
+			flusher.Flush()
+			return
+		}
+	}
+}
+
 
 // UnpackRequest unpacks the Protobuf data into a party.Players structure.
 func UnpackRequest(w http.ResponseWriter, r *http.Request, unpackedRequest *party.Players) {
@@ -158,29 +179,6 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request, unpackedRequest *part
 	if err != nil {
 		http.Error(w, "Failed to unmarshal Protobuf data", http.StatusBadRequest)
 		return
-	}
-}
-
-func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) {
-
-	w.Header().Set("Content-Type", "text/plain")
-	w.Header().Set("Transfer-Encoding", "chunked")
-	w.Header().Set("Connection", "keep-alive")
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
-		return
-	}
-
-	for {
-		time.Sleep(2 * time.Second)
-		lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.Player1RiotName)
-		w.Write([]byte(lfgResponse))
-		flusher.Flush()
-
-		if MatchmakingSelection(w, unpackedRequest, rdb, ctx) {
-			return
-		}
 	}
 }
 
