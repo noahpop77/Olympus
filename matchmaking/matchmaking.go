@@ -131,10 +131,20 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 
 		w.Write([]byte(matchmadeTeam))
 
-		fmt.Println(partyCancels)
 		for _, partyKey := range delKeys {
-			cancelTask(partyKey, partyCancels)
+			if cancel, ok := partyCancels.Load(partyKey); ok {
+				cancel.(context.CancelFunc)()
+				partyCancels.Delete(partyKey) 
+				// fmt.Printf("Task %s canceled\n", partyKey)
+			}
 		}
+
+		partyCancels.Range(func(key, _ interface{}) bool {
+			fmt.Printf("%v, ", key)
+			return true
+		})
+		fmt.Printf("\n\n")
+		
 
 		return true
 	}
@@ -143,19 +153,7 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 	return false
 }
 
-// Function to cancel a specific task
-func cancelTask(taskID string, partyCancels *sync.Map) {
-	// Look up the cancel function from the global map
-	if cancel, ok := partyCancels.Load(taskID); ok {
-		// Call the cancel function to cancel the context
-		cancel.(context.CancelFunc)()
-		fmt.Printf("Task %s canceled\n", taskID)
-	} else {
-		fmt.Printf("Task %s not found\n", taskID)
-	}
-}
-
-func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context, partyCancels *sync.Map) {
+func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context, partyCancels *sync.Map, matchmakingContext context.Context) {
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -164,18 +162,25 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 	}
 
 	for {
-		time.Sleep(3 * time.Second)
-		lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.Player1RiotName)
-		_, err := w.Write([]byte(lfgResponse))
-		if err != nil {
-			log.Printf("Client disconnected, stopping search for %s", unpackedRequest.Player1RiotName)
+		select {
+		case <- matchmakingContext.Done():
+			fmt.Printf("Match found for %s\n", unpackedRequest.Player1RiotName)
+			w.Write([]byte(fmt.Sprintf("Match found for %s\n", unpackedRequest.Player1RiotName)))
 			return
-		}
-		flusher.Flush()
-
-		if MatchmakingSelection(w, unpackedRequest, rdb, ctx, partyCancels) {
+		default:
+			time.Sleep(1 * time.Second)
+			lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.Player1RiotName)
+			_, err := w.Write([]byte(lfgResponse))
+			if err != nil {
+				log.Printf("Client disconnected, stopping search for %s", unpackedRequest.Player1RiotName)
+				return
+			}
 			flusher.Flush()
-			return
+
+			if MatchmakingSelection(w, unpackedRequest, rdb, ctx, partyCancels) {
+				flusher.Flush()
+				return
+			}
 		}
 	}
 }

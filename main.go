@@ -48,13 +48,13 @@ func main() {
 
 	http.HandleFunc("/queueUp", func(writer http.ResponseWriter, requester *http.Request) {
 		var unpackedRequest party.Players
+		matchmaking.UnpackRequest(writer, requester, &unpackedRequest)
 
-		_, cancel := context.WithCancel(context.Background())
+		matchmakingContext, cancel := context.WithCancel(context.Background())
 		partyCancels.Store(unpackedRequest.PartyId, cancel)
 
-		matchmaking.UnpackRequest(writer, requester, &unpackedRequest)
 		matchmaking.PartyHandler(writer, &unpackedRequest, rdb, ctx)
-		matchmaking.MatchFinder(writer, &unpackedRequest, rdb, ctx, &partyCancels)
+		matchmaking.MatchFinder(writer, &unpackedRequest, rdb, ctx, &partyCancels, matchmakingContext)
 	})
 
 	port := ":8080"
