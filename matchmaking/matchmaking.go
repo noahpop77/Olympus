@@ -76,10 +76,10 @@ func processParty(ctx context.Context, rdb *redis.Client, myRank int, key string
 
 // MatchmakingSelection concurrently processes all parties to build a matched team.
 // When a team is found (9 matches in addition to the initiating party), the corresponding Redis keys are deleted.
-func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) bool {
+func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context, partyCancels *sync.Map) bool {
 	var matches []matchedParty
 	var mu sync.Mutex
-	
+
 	mu.Lock()
 
 	myRank, err := strconv.Atoi(unpackedRequest.Player1Rank)
@@ -94,7 +94,6 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 		return false
 	}
 
-	// Process keys concurrently.
 	for _, key := range keys {
 		err := processParty(ctx, rdb, myRank, key, &matches)
 		if err != nil {
@@ -125,12 +124,18 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 
 		var matchmadeTeam string
 		for i := 0; i < 9; i++ {
-			matchmadeTeam += fmt.Sprintf("Team Member %d:\tMy Rank: %d - %s : %s\n",
-				i, myRank, matches[i].PlayerRank, matches[i].Puuid)
+			matchmadeTeam += fmt.Sprintf("Team Member %d:\tMy Rank: %d - %s : %s\n", i, myRank, matches[i].PlayerRank, matches[i].Puuid)
 		}
+
 		matchmadeTeam += fmt.Sprintf("ME           :  My Rank       %d : %s\n", myRank, unpackedRequest.Player1Puuid)
 
 		w.Write([]byte(matchmadeTeam))
+
+		fmt.Println(partyCancels)
+		for _, partyKey := range delKeys {
+			cancelTask(partyKey, partyCancels)
+		}
+
 		return true
 	}
 	mu.Unlock()
@@ -138,7 +143,19 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 	return false
 }
 
-func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) {
+// Function to cancel a specific task
+func cancelTask(taskID string, partyCancels *sync.Map) {
+	// Look up the cancel function from the global map
+	if cancel, ok := partyCancels.Load(taskID); ok {
+		// Call the cancel function to cancel the context
+		cancel.(context.CancelFunc)()
+		fmt.Printf("Task %s canceled\n", taskID)
+	} else {
+		fmt.Printf("Task %s not found\n", taskID)
+	}
+}
+
+func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context, partyCancels *sync.Map) {
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -147,7 +164,7 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 	}
 
 	for {
-		time.Sleep(2 * time.Second)
+		time.Sleep(3 * time.Second)
 		lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.Player1RiotName)
 		_, err := w.Write([]byte(lfgResponse))
 		if err != nil {
@@ -156,13 +173,12 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 		}
 		flusher.Flush()
 
-		if MatchmakingSelection(w, unpackedRequest, rdb, ctx) {
+		if MatchmakingSelection(w, unpackedRequest, rdb, ctx, partyCancels) {
 			flusher.Flush()
 			return
 		}
 	}
 }
-
 
 // UnpackRequest unpacks the Protobuf data into a party.Players structure.
 func UnpackRequest(w http.ResponseWriter, r *http.Request, unpackedRequest *party.Players) {

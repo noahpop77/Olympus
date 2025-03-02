@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/noahpop77/Olympus/endpoints"
 	"github.com/noahpop77/Olympus/matchmaking"
 	"github.com/noahpop77/Olympus/matchmaking/party"
 
 	"github.com/redis/go-redis/v9"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
 func PrintBanner(port string) {
@@ -28,6 +27,7 @@ func PrintBanner(port string) {
 
 func main() {
 
+	var partyCancels sync.Map
 	ctx := context.Background()
 
 	rdb := redis.NewClient(&redis.Options{
@@ -48,17 +48,14 @@ func main() {
 
 	http.HandleFunc("/queueUp", func(writer http.ResponseWriter, requester *http.Request) {
 		var unpackedRequest party.Players
+
+		_, cancel := context.WithCancel(context.Background())
+		partyCancels.Store(unpackedRequest.PartyId, cancel)
+
 		matchmaking.UnpackRequest(writer, requester, &unpackedRequest)
 		matchmaking.PartyHandler(writer, &unpackedRequest, rdb, ctx)
-		matchmaking.MatchFinder(writer, &unpackedRequest, rdb, ctx)
+		matchmaking.MatchFinder(writer, &unpackedRequest, rdb, ctx, &partyCancels)
 	})
-
-	// http.HandleFunc("/matchmaking", func(writer http.ResponseWriter, requester *http.Request) {
-	// 	var unpackedRequest party.Players
-	// 	matchmaking.UnpackRequest(writer, requester, &unpackedRequest)
-	// 	matchmaking.SimulateQueueTimer(writer, requester, &unpackedRequest)
-	// 	matchmaking.MatchmakingSelection(writer, &unpackedRequest, rdb, ctx)
-	// })
 
 	port := ":8080"
 	PrintBanner(port)
