@@ -33,6 +33,7 @@ func SimulateQueueTimer(w http.ResponseWriter, r *http.Request, unpackedRequest 
 
 // matchedParty holds information about a party match.
 type matchedParty struct {
+	Player1RiotName	string
 	Key        string
 	Puuid      string
 	PlayerRank string
@@ -66,6 +67,7 @@ func processParty(ctx context.Context, rdb *redis.Client, myRank int, key string
 	// Check rank constraints.
 	if WithinRankRange(myRank, teammateRank) {
 		*matches = append(*matches, matchedParty{
+			Player1RiotName: hashData["Player1RiotName"],
 			Key:        key,
 			Puuid:      hashData["Player1Puuid"],
 			PlayerRank: playerRankStr,
@@ -115,6 +117,11 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 		return false
 	}
 
+	for _, value := range delKeys {
+		fmt.Printf("%s\n", value)
+	}
+
+	// Deletes keys for found players during matchmaking
 	if err := rdb.Del(ctx, delKeys...).Err(); err != nil {
 		log.Printf("Error deleting matched keys: %v", err)
 		return false
@@ -127,7 +134,14 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 			matchmadeTeam += fmt.Sprintf("Team Member %d:\tMy Rank: %d - %s : %s\n", i, myRank, matches[i].PlayerRank, matches[i].Puuid)
 		}
 
-		matchmadeTeam += fmt.Sprintf("ME           :  My Rank       %d : %s\n", myRank, unpackedRequest.Player1Puuid)
+		matchmadeTeam += fmt.Sprintf("ME           :  My Rank       %d : %s\n\n\n", myRank, unpackedRequest.Player1Puuid)
+		
+		// fmt.Printf("\nDeleting context for:\n")
+		// counter := 1
+		// for i := 0; i < 9; i++ {
+		// 	fmt.Printf("%d: %s\n",counter, matches[i].Player1RiotName)
+		// 	counter++
+		// }
 
 		w.Write([]byte(matchmadeTeam))
 
@@ -139,17 +153,10 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 			}
 		}
 
-		partyCancels.Range(func(key, _ interface{}) bool {
-			fmt.Printf("%v, ", key)
-			return true
-		})
-		fmt.Printf("\n\n")
-		
-
 		return true
 	}
-	mu.Unlock()
 
+	mu.Unlock()
 	return false
 }
 
@@ -164,15 +171,18 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 	for {
 		select {
 		case <- matchmakingContext.Done():
-			fmt.Printf("Match found for %s\n", unpackedRequest.Player1RiotName)
-			w.Write([]byte(fmt.Sprintf("Match found for %s\n", unpackedRequest.Player1RiotName)))
+			// fmt.Printf("Match found for %s\n", unpackedRequest.Player1RiotName)
+			// w.Write([]byte(fmt.Sprintf("Match found for %s\n", unpackedRequest.Player1RiotName)))
 			return
 		default:
 			time.Sleep(1 * time.Second)
 			lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.Player1RiotName)
 			_, err := w.Write([]byte(lfgResponse))
 			if err != nil {
-				log.Printf("Client disconnected, stopping search for %s", unpackedRequest.Player1RiotName)
+				// log.Printf("Client disconnected, stopping search for %s", unpackedRequest.Player1RiotName)
+
+				// Removes players who disconnect from queue from the Redis DB
+				RemovePartyFromRedis(unpackedRequest, rdb, ctx)
 				return
 			}
 			flusher.Flush()
@@ -203,8 +213,8 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request, unpackedRequest *part
 	}
 }
 
-// PartyHandler handles party creation and Redis caching for the matchmaking request.
-func PartyHandler(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) {
+// AddPartyToRedis handles party creation and Redis caching for the matchmaking request.
+func AddPartyToRedis(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) {
 	// Check if the party already exists.
 	err := rdb.HGet(ctx, unpackedRequest.PartyId, "PartyId").Err()
 	if err != nil && err != redis.Nil {
@@ -233,5 +243,13 @@ func PartyHandler(w http.ResponseWriter, unpackedRequest *party.Players, rdb *re
 		if err != nil {
 			log.Fatalf("could not set participant info: %v", err)
 		}
+	}
+}
+
+// Deletes ParyIDs from Redis for players who cancel queue
+func RemovePartyFromRedis(unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) {
+	err := rdb.Del(ctx, unpackedRequest.PartyId).Err()
+	if err != nil {
+		log.Fatalf("could not delete participant info: %v", err)
 	}
 }

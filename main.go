@@ -43,7 +43,7 @@ func main() {
 	http.HandleFunc("/addToQueue", func(writer http.ResponseWriter, requester *http.Request) {
 		var unpackedRequest party.Players
 		matchmaking.UnpackRequest(writer, requester, &unpackedRequest)
-		matchmaking.PartyHandler(writer, &unpackedRequest, rdb, ctx)
+		matchmaking.AddPartyToRedis(writer, &unpackedRequest, rdb, ctx)
 	})
 
 	http.HandleFunc("/queueUp", func(writer http.ResponseWriter, requester *http.Request) {
@@ -53,7 +53,7 @@ func main() {
 		matchmakingContext, cancel := context.WithCancel(context.Background())
 		partyCancels.Store(unpackedRequest.PartyId, cancel)
 
-		matchmaking.PartyHandler(writer, &unpackedRequest, rdb, ctx)
+		matchmaking.AddPartyToRedis(writer, &unpackedRequest, rdb, ctx)
 		matchmaking.MatchFinder(writer, &unpackedRequest, rdb, ctx, &partyCancels, matchmakingContext)
 	})
 
