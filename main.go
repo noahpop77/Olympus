@@ -54,7 +54,7 @@ func main() {
 		partyCancels.Store(unpackedRequest.PartyId, cancel)
 
 		matchmaking.AddPartyToRedis(writer, &unpackedRequest, rdb, ctx)
-		matchmaking.MatchFinder(writer, &unpackedRequest, rdb, ctx, &partyCancels, matchmakingContext)
+		matchmaking.MatchFinder(writer, &unpackedRequest, rdb, ctx, &partyCancels, matchmakingContext, requester)
 	})
 
 	port := ":8080"

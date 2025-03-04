@@ -117,13 +117,12 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 		return false
 	}
 
-	// Deletes keys for found players during matchmaking
+	// Deletes keys for teammates
 	if err := rdb.Del(ctx, delKeys...).Err(); err != nil {
 		log.Printf("Error deleting matched keys: %v", err)
 		return false
 	}
-
-	// Deletes keys for found players during matchmaking
+	// Deletes keys for Anchor being
 	if err := rdb.Del(ctx, unpackedRequest.PartyId).Err(); err != nil {
 		log.Printf("Error anchor being: %v", err)
 		return false
@@ -155,7 +154,7 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 	return false
 }
 
-func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context, partyCancels *sync.Map, matchmakingContext context.Context) {
+func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context, partyCancels *sync.Map, matchmakingContext context.Context, requester *http.Request) {
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -163,29 +162,42 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 		return
 	}
 
+	ticker := time.NewTicker(1* time.Second)
+	defer ticker.Stop()
+
+	// Main event loop for matchmaking
 	for {
 		select {
+		
+			// Other player uses you as a team mate
 		case <- matchmakingContext.Done():
-			// fmt.Printf("Match found for %s\n", unpackedRequest.Player1RiotName)
-			// w.Write([]byte(fmt.Sprintf("Match found for %s\n", unpackedRequest.Player1RiotName)))
 			return
-		default:
-			time.Sleep(1 * time.Second)
+		
+			// Queue is canceled by player
+		case <- requester.Context().Done():
+			RemovePartyFromRedis(unpackedRequest, rdb, ctx)
+			return
+		
+		// Notifies client on predefined timer to not eat all compute resources
+		case <- ticker.C:
 			lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.Player1RiotName)
 			_, err := w.Write([]byte(lfgResponse))
 			if err != nil {
 				// Handles players who disconnect from queue
-				RemovePartyFromRedis(unpackedRequest, rdb, ctx)
 				return
 			}
 			flusher.Flush()
-
+		
+		// Default case in which we check for properly made matches
+		default:
 			if MatchmakingSelection(w, unpackedRequest, rdb, ctx, partyCancels) {
 				flusher.Flush()
 				return
 			}
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
+	
 }
 
 // UnpackRequest unpacks the Protobuf data into a party.Players structure.
