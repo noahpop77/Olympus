@@ -117,15 +117,18 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 		return false
 	}
 
-	for _, value := range delKeys {
-		fmt.Printf("%s\n", value)
-	}
-
 	// Deletes keys for found players during matchmaking
 	if err := rdb.Del(ctx, delKeys...).Err(); err != nil {
 		log.Printf("Error deleting matched keys: %v", err)
 		return false
 	}
+
+	// Deletes keys for found players during matchmaking
+	if err := rdb.Del(ctx, unpackedRequest.PartyId).Err(); err != nil {
+		log.Printf("Error anchor being: %v", err)
+		return false
+	}
+
 
 	if len(matches) >= 9 {
 
@@ -136,20 +139,12 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 
 		matchmadeTeam += fmt.Sprintf("ME           :  My Rank       %d : %s\n\n\n", myRank, unpackedRequest.Player1Puuid)
 		
-		// fmt.Printf("\nDeleting context for:\n")
-		// counter := 1
-		// for i := 0; i < 9; i++ {
-		// 	fmt.Printf("%d: %s\n",counter, matches[i].Player1RiotName)
-		// 	counter++
-		// }
-
 		w.Write([]byte(matchmadeTeam))
 
 		for _, partyKey := range delKeys {
 			if cancel, ok := partyCancels.Load(partyKey); ok {
 				cancel.(context.CancelFunc)()
 				partyCancels.Delete(partyKey) 
-				// fmt.Printf("Task %s canceled\n", partyKey)
 			}
 		}
 
@@ -179,9 +174,7 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 			lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.Player1RiotName)
 			_, err := w.Write([]byte(lfgResponse))
 			if err != nil {
-				// log.Printf("Client disconnected, stopping search for %s", unpackedRequest.Player1RiotName)
-
-				// Removes players who disconnect from queue from the Redis DB
+				// Handles players who disconnect from queue
 				RemovePartyFromRedis(unpackedRequest, rdb, ctx)
 				return
 			}
