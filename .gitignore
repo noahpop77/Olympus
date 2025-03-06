@@ -2,3 +2,4 @@ archive
 dbScripts
 scratchpad
 *.rdb
+.vscode

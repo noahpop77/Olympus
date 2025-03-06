@@ -27,6 +27,7 @@ func PrintBanner(port string) {
 
 func main() {
 
+	var mu sync.Mutex
 	var partyCancels sync.Map
 	ctx := context.Background()
 
@@ -54,7 +55,7 @@ func main() {
 		partyCancels.Store(unpackedRequest.PartyId, cancel)
 
 		matchmaking.AddPartyToRedis(writer, &unpackedRequest, rdb, ctx)
-		matchmaking.MatchFinder(writer, &unpackedRequest, rdb, ctx, &partyCancels, matchmakingContext, requester)
+		matchmaking.MatchFinder(writer, &unpackedRequest, rdb, ctx, &partyCancels, matchmakingContext, requester, &mu)
 	})
 
 	port := ":8080"

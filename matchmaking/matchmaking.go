@@ -41,25 +41,21 @@ type matchedParty struct {
 
 // processParty processes a single party by verifying rank constraints and performing an atomic update.
 // If the party is a valid match, it adds its information (including its key) to the matched slice.
-func processParty(ctx context.Context, rdb *redis.Client, myRank int, key string, matches *[]matchedParty) error {
+func processParty(ctx context.Context, rdb *redis.Client, unpackedRequest *party.Players, myRank int, key string, matches *[]matchedParty) error {
 	// Get the party hash data.
 	hashData, err := rdb.HGetAll(ctx, key).Result()
 	if err != nil {
 		log.Printf("failed to get hash data for key %s: %v", key, err)
 		return err
 	}
+	if hashData["Player1RiotName"] == unpackedRequest.Player1RiotName {
+		return nil
+	}
 	if len(hashData) == 0 {
 		return nil
 	}
 
-	// Build the player info.
-	playerRankStr := hashData["Player1Rank"]
-
-	if playerRankStr == "" {
-		// Skip processing if no valid rank is present
-		return nil
-	}
-	teammateRank, err := strconv.Atoi(playerRankStr)
+	teammateRank, err := strconv.Atoi(hashData["Player1Rank"])
 	if err != nil {
 		return err
 	}
@@ -70,19 +66,21 @@ func processParty(ctx context.Context, rdb *redis.Client, myRank int, key string
 			Player1RiotName: hashData["Player1RiotName"],
 			Key:        key,
 			Puuid:      hashData["Player1Puuid"],
-			PlayerRank: playerRankStr,
+			PlayerRank: hashData["Player1Rank"],
 		})
+		return nil
 	}
 	return err
 }
 
 // MatchmakingSelection concurrently processes all parties to build a matched team.
 // When a team is found (9 matches in addition to the initiating party), the corresponding Redis keys are deleted.
-func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context, partyCancels *sync.Map) bool {
-	var matches []matchedParty
-	var mu sync.Mutex
+func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context, partyCancels *sync.Map, mu *sync.Mutex) bool {
+	var matchedParties []matchedParty
 
+	// Main mutex
 	mu.Lock()
+	defer mu.Unlock()
 
 	myRank, err := strconv.Atoi(unpackedRequest.Player1Rank)
 	if err != nil {
@@ -92,22 +90,26 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 
 	keys, err := rdb.Keys(ctx, "*").Result()
 	if err != nil {
-		log.Fatalf("could not retrieve keys: %v", err)
+		log.Printf("could not retrieve keys: %v", err)
 		return false
 	}
 
+	// Populates party list with viable team mates based on rank
 	for _, key := range keys {
-		err := processParty(ctx, rdb, myRank, key, &matches)
+		err := processParty(ctx, rdb, unpackedRequest, myRank, key, &matchedParties)
 		if err != nil {
 			log.Printf("Error processing key %s: %v", key, err)
 			return false
+		}
+		if len(matchedParties) == 9 {
+			break
 		}
 	}
 
 	// Remove matched parties from Redis so they cannot be reused.
 	var delKeys []string
-	for i := 0; i < len(matches); i++ {
-		delKeys = append(delKeys, matches[i].Key)
+	for i := 0; i < len(matchedParties); i++ {
+		delKeys = append(delKeys, matchedParties[i].Key)
 		if len(delKeys) == 9 {
 			break
 		}
@@ -128,33 +130,31 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 		return false
 	}
 
+	responseText := fmt.Sprintf("Match found for %s! - ", unpackedRequest.Player1RiotName)
+	fmt.Println(len(matchedParties))
+	fmt.Println(matchedParties)
+	for i := 0; i < 9; i++ {
+		responseText += fmt.Sprintf("%s, ", matchedParties[i].Player1RiotName)
+	}
+	responseText += "\n"
+	
+	w.Write([]byte(responseText))
 
-	if len(matches) >= 9 {
-
-		var matchmadeTeam string
-		for i := 0; i < 9; i++ {
-			matchmadeTeam += fmt.Sprintf("Team Member %d:\tMy Rank: %d - %s : %s\n", i, myRank, matches[i].PlayerRank, matches[i].Puuid)
+	for _, partyKey := range delKeys {
+		if cancel, ok := partyCancels.Load(partyKey); ok {
+			cancel.(context.CancelFunc)()
+			partyCancels.Delete(partyKey)
+			// fmt.Println(partyKey + " found a game")
 		}
-
-		matchmadeTeam += fmt.Sprintf("ME           :  My Rank       %d : %s\n\n\n", myRank, unpackedRequest.Player1Puuid)
-		
-		w.Write([]byte(matchmadeTeam))
-
-		for _, partyKey := range delKeys {
-			if cancel, ok := partyCancels.Load(partyKey); ok {
-				cancel.(context.CancelFunc)()
-				partyCancels.Delete(partyKey) 
-			}
-		}
-
-		return true
 	}
 
-	mu.Unlock()
-	return false
+	time.Sleep(100 * time.Millisecond)
+
+	return true
+	
 }
 
-func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context, partyCancels *sync.Map, matchmakingContext context.Context, requester *http.Request) {
+func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context, partyCancels *sync.Map, matchmakingContext context.Context, requester *http.Request, mu *sync.Mutex) {
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -168,14 +168,15 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 	// Main event loop for matchmaking
 	for {
 		select {
-		
-			// Other player uses you as a team mate
+		// Other player uses you as a team mate
 		case <- matchmakingContext.Done():
+			// RemovePartyFromRedis(unpackedRequest.PartyId, rdb, ctx)
+			// w.Write([]byte("Match already found for " + unpackedRequest.Player1RiotName))
 			return
 		
 			// Queue is canceled by player
 		case <- requester.Context().Done():
-			RemovePartyFromRedis(unpackedRequest, rdb, ctx)
+			RemovePartyFromRedis(unpackedRequest.PartyId, rdb, ctx)
 			return
 		
 		// Notifies client on predefined timer to not eat all compute resources
@@ -183,21 +184,16 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 			lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.Player1RiotName)
 			_, err := w.Write([]byte(lfgResponse))
 			if err != nil {
-				// Handles players who disconnect from queue
 				return
 			}
 			flusher.Flush()
-		
-		// Default case in which we check for properly made matches
-		default:
-			if MatchmakingSelection(w, unpackedRequest, rdb, ctx, partyCancels) {
+
+			if MatchmakingSelection(w, unpackedRequest, rdb, ctx, partyCancels, mu) {
 				flusher.Flush()
 				return
 			}
-			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	
 }
 
 // UnpackRequest unpacks the Protobuf data into a party.Players structure.
@@ -223,7 +219,7 @@ func AddPartyToRedis(w http.ResponseWriter, unpackedRequest *party.Players, rdb 
 	// Check if the party already exists.
 	err := rdb.HGet(ctx, unpackedRequest.PartyId, "PartyId").Err()
 	if err != nil && err != redis.Nil {
-		log.Fatalf("could not set participant info: %v", err)
+		log.Printf("could not set participant info: %v", err)
 	}
 
 	// If the party doesn't exist, create it and add to the matchmaking set.
@@ -246,15 +242,15 @@ func AddPartyToRedis(w http.ResponseWriter, unpackedRequest *party.Players, rdb 
 			"Player2Role", unpackedRequest.Player2Role).Err()
 
 		if err != nil {
-			log.Fatalf("could not set participant info: %v", err)
+			log.Printf("could not set participant info: %v", err)
 		}
 	}
 }
 
 // Deletes ParyIDs from Redis for players who cancel queue
-func RemovePartyFromRedis(unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) {
-	err := rdb.Del(ctx, unpackedRequest.PartyId).Err()
+func RemovePartyFromRedis(partyId string, rdb *redis.Client, ctx context.Context) {
+	err := rdb.Del(ctx, partyId).Err()
 	if err != nil {
-		log.Fatalf("could not delete participant info: %v", err)
+		log.Printf("could not delete participant info: %v", err)
 	}
 }
