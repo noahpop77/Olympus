@@ -2,9 +2,20 @@
 This is an insanely skunkworks type project. Everything here is experimental and most likely unstable.
 Will use this as the base for my Olympus project.
 
+# Matchmaking Service
+The matchmaking service will mimic a stripped down version of the League of Legends match maker. It will listen to connections that come in from player clients, once enough players have connected it will match them up based off of a primitive "Anchor Being" methodology. Nine players plus the originating player will form the 10 man lobby and the team player names will be sent back to the participating players.
+
+## Deploy
+There is a dockerized build of the application. The main `Dockerfile` is used for building the GO server itself and it is triggered from the docker-compose file. The docker-compose file will deploy the Redis database as well as the GO matchmaking server. 
+
+To deploy run the command:
+```bash
+docker-compose up
+```
+> **Note:** You might have to run `docker-compose up --build` if you have having problems with old builds being cached. 
+
 
 # Personal Notes
-
 
 These two statements are equivilent. The differences are that the bottom conditional is more concise and that the err variable is exclusive to the conditionals scope.
 ```go
