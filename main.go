@@ -27,7 +27,7 @@ func PrintBanner(port string) {
 func main() {
 
 	var mu sync.Mutex
-	var partyCancels sync.Map
+	var partyResourcesMap sync.Map
 	ctx := context.Background()
 
 	// For the Addr, set it to localhost for locally deployed Redis and container name for containrerized version
@@ -48,10 +48,13 @@ func main() {
 		matchmaking.UnpackRequest(writer, requester, &unpackedRequest)
 
 		matchmakingContext, cancel := context.WithCancel(context.Background())
-		partyCancels.Store(unpackedRequest.PartyId, cancel)
+		partyResourcesMap.Store(unpackedRequest.PartyId, matchmaking.PartyResources{
+			CancelFunc: cancel,
+			Writer:     writer,
+		})
 
 		matchmaking.AddPartyToRedis(writer, &unpackedRequest, rdb, ctx)
-		matchmaking.MatchFinder(writer, &unpackedRequest, rdb, ctx, &partyCancels, matchmakingContext, requester, &mu)
+		matchmaking.MatchFinder(writer, &unpackedRequest, rdb, ctx, &partyResourcesMap, matchmakingContext, requester, &mu)
 	})
 
 	port := ":8080"

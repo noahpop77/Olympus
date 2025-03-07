@@ -8,7 +8,7 @@ The matchmaking service will mimic a stripped down version of the League of Lege
 ## Deploy
 There is a dockerized build of the application. The main `Dockerfile` is used for building the GO server itself and it is triggered from the docker-compose file. The docker-compose file will deploy the Redis database as well as the GO matchmaking server. 
 
-To deploy run the command:
+To deploy the matchmaking service just run the following command in the projects root directory
 ```bash
 docker-compose up
 ```
