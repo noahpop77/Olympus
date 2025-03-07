@@ -33,10 +33,10 @@ func SimulateQueueTimer(w http.ResponseWriter, r *http.Request, unpackedRequest 
 
 // matchedParty holds information about a party match.
 type matchedParty struct {
-	Player1RiotName	string
-	Key        string
-	Puuid      string
-	PlayerRank string
+	Player1RiotName string
+	Key             string
+	Puuid           string
+	PlayerRank      string
 }
 
 // processParty processes a single party by verifying rank constraints and performing an atomic update.
@@ -64,9 +64,9 @@ func processParty(ctx context.Context, rdb *redis.Client, unpackedRequest *party
 	if WithinRankRange(myRank, teammateRank) {
 		*matches = append(*matches, matchedParty{
 			Player1RiotName: hashData["Player1RiotName"],
-			Key:        key,
-			Puuid:      hashData["Player1Puuid"],
-			PlayerRank: hashData["Player1Rank"],
+			Key:             key,
+			Puuid:           hashData["Player1Puuid"],
+			PlayerRank:      hashData["Player1Rank"],
 		})
 		return nil
 	}
@@ -137,7 +137,7 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 		responseText += fmt.Sprintf("%s, ", matchedParties[i].Player1RiotName)
 	}
 	responseText += "\n"
-	
+
 	w.Write([]byte(responseText))
 
 	for _, partyKey := range delKeys {
@@ -151,7 +151,7 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 	time.Sleep(100 * time.Millisecond)
 
 	return true
-	
+
 }
 
 func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context, partyCancels *sync.Map, matchmakingContext context.Context, requester *http.Request, mu *sync.Mutex) {
@@ -162,25 +162,25 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 		return
 	}
 
-	ticker := time.NewTicker(1* time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	// Main event loop for matchmaking
 	for {
 		select {
 		// Other player uses you as a team mate
-		case <- matchmakingContext.Done():
+		case <-matchmakingContext.Done():
 			// RemovePartyFromRedis(unpackedRequest.PartyId, rdb, ctx)
 			// w.Write([]byte("Match already found for " + unpackedRequest.Player1RiotName))
 			return
-		
+
 			// Queue is canceled by player
-		case <- requester.Context().Done():
+		case <-requester.Context().Done():
 			RemovePartyFromRedis(unpackedRequest.PartyId, rdb, ctx)
 			return
-		
+
 		// Notifies client on predefined timer to not eat all compute resources
-		case <- ticker.C:
+		case <-ticker.C:
 			lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.Player1RiotName)
 			_, err := w.Write([]byte(lfgResponse))
 			if err != nil {
