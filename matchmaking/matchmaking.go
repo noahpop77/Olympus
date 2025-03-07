@@ -97,7 +97,7 @@ func AddPartyToRedis(w http.ResponseWriter, unpackedRequest *party.Players, rdb 
 
 // Deletes ParyIDs from Redis for players who cancel queue
 func RemovePartyFromRedis(partyId string, rdb *redis.Client, ctx context.Context) {
-	err := rdb.Del(ctx, partyId).Err()
+	err := rdb.Expire(ctx, partyId, 5*time.Second).Err()
 	if err != nil {
 		log.Printf("could not delete participant info: %v", err)
 	}
@@ -106,26 +106,29 @@ func RemovePartyFromRedis(partyId string, rdb *redis.Client, ctx context.Context
 // processParty processes a single party by verifying rank constraints and performing an atomic update.
 // If the party is a valid match, it adds its information (including its key) to the matched slice.
 func processParty(ctx context.Context, rdb *redis.Client, unpackedRequest *party.Players, myRank int, key string, matches *[]matchedParty) error {
-	// Get the party hash data.
-	hashData, err := rdb.HGetAll(ctx, key).Result()
+
+	tempRank, err := rdb.HGet(ctx, key, "Player1Rank").Result()
 	if err != nil {
 		log.Printf("failed to get hash data for key %s: %v", key, err)
 		return err
 	}
-	if hashData["Player1RiotName"] == unpackedRequest.Player1RiotName {
-		return nil
-	}
-	if len(hashData) == 0 {
+	if len(tempRank) == 0 {
 		return nil
 	}
 
-	teammateRank, err := strconv.Atoi(hashData["Player1Rank"])
-	if err != nil {
-		return err
-	}
+	teammateRank, err := strconv.Atoi(tempRank)
 
 	// Check rank constraints.
 	if WithinRankRange(myRank, teammateRank) {
+		hashData, err := rdb.HGetAll(ctx, key).Result()
+		if err != nil {
+			log.Printf("failed to get hash data for key %s: %v", key, err)
+			return err
+		}
+		if hashData["Player1RiotName"] == unpackedRequest.Player1RiotName {
+			return nil
+		}
+
 		*matches = append(*matches, matchedParty{
 			Player1RiotName: hashData["Player1RiotName"],
 			Key:             key,
@@ -134,6 +137,7 @@ func processParty(ctx context.Context, rdb *redis.Client, unpackedRequest *party
 		})
 		return nil
 	}
+
 	return err
 }
 
@@ -152,20 +156,30 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 		return false
 	}
 
-	keys, err := rdb.Keys(ctx, "*").Result()
-	if err != nil {
-		log.Printf("could not retrieve keys: %v", err)
-		return false
-	}
-
-	// Populates party list with viable team mates based on rank
-	for _, key := range keys {
-		err := processParty(ctx, rdb, unpackedRequest, myRank, key, &matchedParties)
+	// Takes steps as its scanning through the database of 100 keys at a time to not
+	// lock up the Redis database if we were to scan the whole thing in 1 go for no
+	// reason. 100 keys at a time steps.
+	var newCursor uint64
+	for len(matchedParties) < 9 {
+		keys, nextCursor, err := rdb.Scan(ctx, newCursor, "*", 100).Result()
 		if err != nil {
-			log.Printf("Error processing key %s: %v", key, err)
+			log.Printf("Error scanning keys: %v", err)
 			return false
 		}
-		if len(matchedParties) == 9 {
+
+		for _, key := range keys {
+			if len(matchedParties) == 9 {
+				break
+			}
+			err := processParty(ctx, rdb, unpackedRequest, myRank, key, &matchedParties)
+			if err != nil {
+				log.Printf("Error processing key %s: %v", key, err)
+				return false
+			}
+		}
+
+		newCursor = nextCursor
+		if newCursor == 0 || len(matchedParties) == 9 {
 			break
 		}
 	}
@@ -202,10 +216,10 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 
 	w.Write([]byte(responseText))
 
+	// Finishes off and cleans up the connections for teammates
 	for _, partyKey := range delKeys {
 		if partyCtx, ok := partyResourcesMap.Load(partyKey); ok {
 			if ctx, ok := partyCtx.(PartyResources); ok {
-				// Use ctx.CancelFunc and ctx.Writer
 				ctx.Writer.Write([]byte(responseText))
 				ctx.CancelFunc()
 			}
@@ -234,8 +248,6 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 		select {
 		// Other player uses you as a team mate
 		case <-matchmakingContext.Done():
-			// RemovePartyFromRedis(unpackedRequest.PartyId, rdb, ctx)
-			// w.Write([]byte("Match already found for " + unpackedRequest.Player1RiotName))
 			return
 
 			// Queue is canceled by player
@@ -257,5 +269,7 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 				return
 			}
 		}
+
 	}
+
 }

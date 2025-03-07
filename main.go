@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/noahpop77/Olympus/matchmaking"
@@ -24,15 +25,27 @@ func PrintBanner(port string) {
 	fmt.Println("================================")
 }
 
+func IsRunningInDocker() bool {
+	_, err := os.Stat("/.dockerenv")
+	return err == nil
+}
+
 func main() {
 
 	var mu sync.Mutex
 	var partyResourcesMap sync.Map
 	ctx := context.Background()
+	var redisAddr string
+	
+	if IsRunningInDocker() {
+		redisAddr = "redis_db:6379" // Docker service name
+	} else {
+		redisAddr = "localhost:6379" // Local development
+	}
 
 	// For the Addr, set it to localhost for locally deployed Redis and container name for containrerized version
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     "redis_db:6379",
+		Addr:     redisAddr,
 		Password: "", // no password set
 		DB:       0,  // use default DB
 	})
