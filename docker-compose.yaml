@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:latest
+    container_name: redis_db
+    restart: always
+    ports:
+      - "6379:6379"
+
+  go_server:
+    build:
+      context: .
+      dockerfile: Dockerfile  # Reference the separate Dockerfile
+    container_name: go_server
+    restart: always
+    depends_on:
+      - redis
+    ports:
+      - "8080:8080"

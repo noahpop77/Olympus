@@ -131,8 +131,6 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 	}
 
 	responseText := fmt.Sprintf("Match found for %s! - ", unpackedRequest.Player1RiotName)
-	fmt.Println(len(matchedParties))
-	fmt.Println(matchedParties)
 	for i := 0; i < 9; i++ {
 		responseText += fmt.Sprintf("%s, ", matchedParties[i].Player1RiotName)
 	}

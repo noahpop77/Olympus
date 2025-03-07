@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/noahpop77/Olympus/endpoints"
 	"github.com/noahpop77/Olympus/matchmaking"
 	"github.com/noahpop77/Olympus/matchmaking/party"
 
@@ -31,14 +30,11 @@ func main() {
 	var partyCancels sync.Map
 	ctx := context.Background()
 
+	// For the Addr, set it to localhost for locally deployed Redis and container name for containrerized version
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
+		Addr:     "redis_db:6379",
 		Password: "", // no password set
 		DB:       0,  // use default DB
-	})
-
-	http.HandleFunc("/addMatch", func(writer http.ResponseWriter, requester *http.Request) {
-		endpoints.InsertIntoDatabase(writer, requester, rdb, ctx)
 	})
 
 	http.HandleFunc("/addToQueue", func(writer http.ResponseWriter, requester *http.Request) {
