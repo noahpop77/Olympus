@@ -34,8 +34,8 @@
                 "path": "img/hero-image.png"
             }
         ],
-        "version": "1.1.0",
-        "updated": "2025-02-21",
+        "version": "1.2.0",
+        "updated": "2025-03-10",
         "links": [
             {
                 "name": "GitHub",
@@ -68,7 +68,8 @@
                 "title": "Open in Grafana Profiles Drilldown",
                 "description": "Try our new queryless experience for profiles",
                 "targets": [
-                    "grafana/explore/toolbar/action"
+                    "grafana/explore/toolbar/action",
+                    "grafana/traceview/details"
                 ]
             }
         ]

@@ -1,0 +1,17 @@
+{
+	"ulid": "01JNYKB5DX4VKXWS8138RF04NP",
+	"minTime": 1741551612307,
+	"maxTime": 1741557600000,
+	"stats": {
+		"numSamples": 29127,
+		"numSeries": 69,
+		"numChunks": 208
+	},
+	"compaction": {
+		"level": 1,
+		"sources": [
+			"01JNYKB5DX4VKXWS8138RF04NP"
+		]
+	},
+	"version": 1
+}
