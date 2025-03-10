@@ -26,6 +26,9 @@ services:
       - go_server
     ports:
       - "9090:9090"
+    command:
+    - "--log.level=error"  # Set the log level to debug
+    - "--config.file=/etc/prometheus/prometheus.yml"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus_data:/prometheus
@@ -37,8 +40,11 @@ services:
       - prometheus
     ports:
       - "3000:3000"
-    depends_on:
-      - prometheus
+    environment:
+    - GF_LOG_LEVEL=error
+    volumes:
+      - ./grafana_data:/var/lib/grafana
 
 volumes:
   prometheus_data:
+  grafana_data:

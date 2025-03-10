@@ -60,7 +60,6 @@ var (
 	)
 )
 
-
 func init() {
 	prometheus.MustRegister(requestsTotal, requestDuration, activeConnections)
 }

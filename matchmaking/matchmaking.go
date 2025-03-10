@@ -45,21 +45,23 @@ func SimulateQueueTimer(w http.ResponseWriter, r *http.Request, unpackedRequest 
 }
 
 // UnpackRequest unpacks the Protobuf data into a party.Players structure.
-func UnpackRequest(w http.ResponseWriter, r *http.Request, unpackedRequest *party.Players) {
+func UnpackRequest(w http.ResponseWriter, r *http.Request, unpackedRequest *party.Players) bool {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		return
+		return false
 	}
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
-		return
+		return false
 	}
 	err = proto.Unmarshal(data, unpackedRequest)
 	if err != nil {
 		http.Error(w, "Failed to unmarshal Protobuf data", http.StatusBadRequest)
-		return
+		return false
 	}
+
+	return true
 }
 
 // AddPartyToRedis handles party creation and Redis caching for the matchmaking request.
