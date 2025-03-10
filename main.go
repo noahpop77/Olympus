@@ -7,9 +7,12 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/noahpop77/Olympus/matchmaking"
 	"github.com/noahpop77/Olympus/matchmaking/party"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -30,50 +33,93 @@ func IsRunningInDocker() bool {
 	return err == nil
 }
 
-func main() {
+// Define Prometheus metrics
+var (
+	requestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "api_requests_total",
+			Help: "Total number of requests to API endpoints",
+		},
+		[]string{"endpoint"},
+	)
 
+	requestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "api_request_duration_seconds",
+			Help:    "Histogram of response time for API requests",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"endpoint"},
+	)
+
+	activeConnections = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "queueup_active_players",
+			Help: "Number of players currently connected to /queueUp",
+		},
+	)
+)
+
+
+func init() {
+	prometheus.MustRegister(requestsTotal, requestDuration, activeConnections)
+}
+
+func instrumentedHandler(endpoint string, handler func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		handler(w, r)
+		duration := time.Since(start).Seconds()
+
+		requestsTotal.WithLabelValues(endpoint).Inc()
+		requestDuration.WithLabelValues(endpoint).Observe(duration)
+	}
+}
+
+func main() {
 	var mu sync.Mutex
 	var partyResourcesMap sync.Map
 	ctx := context.Background()
 	var redisAddr string
-	
+
 	if IsRunningInDocker() {
-		redisAddr = "redis_db:6379" // Docker service name
+		redisAddr = "redis_db:6379"
 	} else {
-		redisAddr = "localhost:6379" // Local development
+		redisAddr = "localhost:6379"
 	}
 
-	// For the Addr, set it to localhost for locally deployed Redis and container name for containrerized version
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     redisAddr,
-		Password: "", // no password set
-		DB:       0,  // use default DB
+		Password: "",
+		DB:       0,
 	})
 
-	http.HandleFunc("/addToQueue", func(writer http.ResponseWriter, requester *http.Request) {
-		var unpackedRequest party.Players
-		matchmaking.UnpackRequest(writer, requester, &unpackedRequest)
-		matchmaking.AddPartyToRedis(writer, &unpackedRequest, rdb, ctx)
-	})
+	http.Handle("/metrics", promhttp.Handler())
 
-	http.HandleFunc("/queueUp", func(writer http.ResponseWriter, requester *http.Request) {
+	http.HandleFunc("/addToQueue", instrumentedHandler("/addToQueue", func(w http.ResponseWriter, r *http.Request) {
 		var unpackedRequest party.Players
-		matchmaking.UnpackRequest(writer, requester, &unpackedRequest)
+		matchmaking.UnpackRequest(w, r, &unpackedRequest)
+		matchmaking.AddPartyToRedis(w, &unpackedRequest, rdb, ctx)
+	}))
+
+	http.HandleFunc("/queueUp", instrumentedHandler("/queueUp", func(w http.ResponseWriter, r *http.Request) {
+		activeConnections.Inc()
+		defer activeConnections.Dec()
+
+		var unpackedRequest party.Players
+		matchmaking.UnpackRequest(w, r, &unpackedRequest)
 
 		matchmakingContext, cancel := context.WithCancel(context.Background())
 		partyResourcesMap.Store(unpackedRequest.PartyId, matchmaking.PartyResources{
 			CancelFunc: cancel,
-			Writer:     writer,
+			Writer:     w,
 		})
 
-		matchmaking.AddPartyToRedis(writer, &unpackedRequest, rdb, ctx)
-		matchmaking.MatchFinder(writer, &unpackedRequest, rdb, ctx, &partyResourcesMap, matchmakingContext, requester, &mu)
-	})
+		matchmaking.AddPartyToRedis(w, &unpackedRequest, rdb, ctx)
+		matchmaking.MatchFinder(w, &unpackedRequest, rdb, ctx, &partyResourcesMap, matchmakingContext, r, &mu)
+	}))
 
 	port := ":8080"
 	PrintBanner(port)
-	if err := http.ListenAndServe(port, nil); err != nil {
-		log.Fatalf("Error starting server: %v\n", err)
-	}
-
+	log.Fatal(http.ListenAndServe(port, nil))
 }

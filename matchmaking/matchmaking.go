@@ -257,6 +257,7 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 
 		// Notifies client on predefined timer to not eat all compute resources
 		case <-ticker.C:
+
 			lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.Player1RiotName)
 			_, err := w.Write([]byte(lfgResponse))
 			if err != nil {

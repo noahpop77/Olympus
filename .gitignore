@@ -3,3 +3,4 @@ dbScripts
 scratchpad
 *.rdb
 .vscode
+prometheus_data
