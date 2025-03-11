@@ -8,16 +8,16 @@ option go_package = "./matchmaking/party";
 message Players {
     string Player1riotName = 1;
     string Player1riotTagLine = 2;
-    string Player1rank = 3;
+    int32 Player1rank = 3;
     string Player1role = 4;
     string Player1puuid = 5;
     string Player2riotName = 6;
     string Player2riotTagLine = 7;
-    string Player2rank = 8;
+    int32 Player2rank = 8;
     string Player2role = 9;
     string Player2puuid = 10;
         
     string partyId = 11;
-    string teamCount = 12;
+    int32 teamCount = 12;
     int32 queueType = 13;
 }

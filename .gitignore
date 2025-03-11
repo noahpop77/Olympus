@@ -2,6 +2,3 @@ archive
 *.rdb
 .vscode
 prometheus_data
-docs
-grafana_data
-prometheus_data

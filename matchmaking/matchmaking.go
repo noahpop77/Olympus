@@ -64,6 +64,28 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request) *party.Players {
 	return &unpackedRequest
 }
 
+func UnpackedRequestValidation(unpackedRequest *party.Players) bool {
+
+	switch {
+	case len(unpackedRequest.Player1Puuid) < 20:
+		return false
+	case unpackedRequest.PartyId[:6] != "PARTY_":
+		return false
+	case len(unpackedRequest.PartyId) < 7:
+		return false
+	case len(unpackedRequest.Player1RiotName) < 4:
+		return false
+	case len(unpackedRequest.Player1RiotTagLine) < 2:
+		return false
+	case unpackedRequest.Player1Rank > 44 && unpackedRequest.Player1Rank < 0:
+		return false
+	case unpackedRequest.Player1Role != "Middle" && unpackedRequest.Player1Role != "Top" && unpackedRequest.Player1Role != "Jungle" && unpackedRequest.Player1Role != "Bottom" && unpackedRequest.Player1Role != "Support":
+		return false 
+	}
+	
+	return true
+}
+
 // AddPartyToRedis handles party creation and Redis caching for the matchmaking request.
 func AddPartyToRedis(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) {
 	
@@ -99,7 +121,7 @@ func RemovePartyFromRedis(partyId string, rdb *redis.Client, ctx context.Context
 
 // processParty processes a single party by verifying rank constraints and performing an atomic update.
 // If the party is a valid match, it adds its information (including its key) to the matched slice.
-func processParty(ctx context.Context, rdb *redis.Client, unpackedRequest *party.Players, myRank int, key string, matches *[]matchedParty) error {
+func processParty(ctx context.Context, rdb *redis.Client, unpackedRequest *party.Players, key string, matches *[]matchedParty) error {
 
 	tempRank, err := rdb.HGet(ctx, key, "Player1Rank").Result()
 	if err != nil {
@@ -113,7 +135,7 @@ func processParty(ctx context.Context, rdb *redis.Client, unpackedRequest *party
 	teammateRank, err := strconv.Atoi(tempRank)
 
 	// Check rank constraints.
-	if WithinRankRange(myRank, teammateRank) {
+	if WithinRankRange(int(unpackedRequest.Player1Rank), teammateRank) {
 		hashData, err := rdb.HGetAll(ctx, key).Result()
 		if err != nil {
 			log.Printf("failed to get hash data for key %s: %v", key, err)
@@ -144,12 +166,6 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 	mu.Lock()
 	defer mu.Unlock()
 
-	myRank, err := strconv.Atoi(unpackedRequest.Player1Rank)
-	if err != nil {
-		http.Error(w, "Invalid player rank", http.StatusBadRequest)
-		return false
-	}
-
 	// Takes steps as its scanning through the database of 100 keys at a time to not
 	// lock up the Redis database if we were to scan the whole thing in 1 go for no
 	// reason. 100 keys at a time steps.
@@ -165,7 +181,7 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 			if len(matchedParties) == 9 {
 				break
 			}
-			err := processParty(ctx, rdb, unpackedRequest, myRank, key, &matchedParties)
+			err := processParty(ctx, rdb, unpackedRequest, key, &matchedParties)
 			if err != nil {
 				log.Printf("Error processing key %s: %v", key, err)
 				return false

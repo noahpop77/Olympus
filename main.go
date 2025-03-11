@@ -114,10 +114,11 @@ func main() {
 		defer r.Body.Close()
 		
 		unpackedRequest := matchmaking.UnpackRequest(w, r,)
-		if unpackedRequest == nil {
+		if !matchmaking.UnpackedRequestValidation(unpackedRequest) {
 			http.Error(w, "Missing requried data in payload", http.StatusBadRequest)
 			return
 		}
+		
 		matchmaking.AddPartyToRedis(w, unpackedRequest, rdb, ctx)
 		
 		matchmakingContext, cancel := context.WithCancel(context.Background())
