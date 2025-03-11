@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/noahpop77/Olympus/matchmaking"
-	"github.com/noahpop77/Olympus/matchmaking/party"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -58,6 +57,20 @@ var (
 			Help: "Number of players currently connected to /queueUp",
 		},
 	)
+
+	cacheHits = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "queueup_active_players",
+			Help: "Number of players currently connected to /queueUp",
+		},
+	)
+
+	cacheMisses = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "queueup_active_players",
+			Help: "Number of players currently connected to /queueUp",
+		},
+	)
 )
 
 func init() {
@@ -95,27 +108,25 @@ func main() {
 
 	http.Handle("/metrics", promhttp.Handler())
 
-	http.HandleFunc("/addToQueue", instrumentedHandler("/addToQueue", func(w http.ResponseWriter, r *http.Request) {
-		var unpackedRequest party.Players
-		matchmaking.UnpackRequest(w, r, &unpackedRequest)
-		matchmaking.AddPartyToRedis(w, &unpackedRequest, rdb, ctx)
-	}))
-
 	http.HandleFunc("/queueUp", instrumentedHandler("/queueUp", func(w http.ResponseWriter, r *http.Request) {
 		activeConnections.Inc()
 		defer activeConnections.Dec()
-
-		var unpackedRequest party.Players
-		matchmaking.UnpackRequest(w, r, &unpackedRequest)
-
+		defer r.Body.Close()
+		
+		unpackedRequest := matchmaking.UnpackRequest(w, r,)
+		if unpackedRequest == nil {
+			http.Error(w, "Missing requried data in payload", http.StatusBadRequest)
+			return
+		}
+		matchmaking.AddPartyToRedis(w, unpackedRequest, rdb, ctx)
+		
 		matchmakingContext, cancel := context.WithCancel(context.Background())
 		partyResourcesMap.Store(unpackedRequest.PartyId, matchmaking.PartyResources{
 			CancelFunc: cancel,
 			Writer:     w,
 		})
 
-		matchmaking.AddPartyToRedis(w, &unpackedRequest, rdb, ctx)
-		matchmaking.MatchFinder(w, &unpackedRequest, rdb, ctx, &partyResourcesMap, matchmakingContext, r, &mu)
+		matchmaking.MatchFinder(w, unpackedRequest, rdb, ctx, &partyResourcesMap, matchmakingContext, r, &mu)
 	}))
 
 	port := ":8080"

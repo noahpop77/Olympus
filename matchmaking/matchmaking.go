@@ -45,61 +45,53 @@ func SimulateQueueTimer(w http.ResponseWriter, r *http.Request, unpackedRequest 
 }
 
 // UnpackRequest unpacks the Protobuf data into a party.Players structure.
-func UnpackRequest(w http.ResponseWriter, r *http.Request, unpackedRequest *party.Players) bool {
+func UnpackRequest(w http.ResponseWriter, r *http.Request) *party.Players {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		return false
-	}
-	data, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
-		return false
-	}
-	err = proto.Unmarshal(data, unpackedRequest)
-	if err != nil {
-		http.Error(w, "Failed to unmarshal Protobuf data", http.StatusBadRequest)
-		return false
+		return nil
 	}
 
-	return true
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil
+	}
+
+	var unpackedRequest party.Players
+	err = proto.Unmarshal(data, &unpackedRequest)
+	if err != nil {
+		return nil
+	}
+
+	return &unpackedRequest
 }
 
 // AddPartyToRedis handles party creation and Redis caching for the matchmaking request.
 func AddPartyToRedis(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context) {
-	// Check if the party already exists.
-	err := rdb.HGet(ctx, unpackedRequest.PartyId, "PartyId").Err()
-	if err != nil && err != redis.Nil {
+	
+	err := rdb.HSet(ctx, unpackedRequest.PartyId,
+		"PartyId", unpackedRequest.PartyId,
+		"TeamCount", unpackedRequest.TeamCount,
+		"QueueType", unpackedRequest.QueueType,
+
+		"Player1Puuid", unpackedRequest.Player1Puuid,
+		"Player1RiotName", unpackedRequest.Player1RiotName,
+		"Player1RiotTagLine", unpackedRequest.Player1RiotTagLine,
+		"Player1Rank", unpackedRequest.Player1Rank,
+		"Player1Role", unpackedRequest.Player1Role,
+
+		"Player2Puuid", unpackedRequest.Player2Puuid,
+		"Player2RiotName", unpackedRequest.Player2RiotName,
+		"Player2RiotTagLine", unpackedRequest.Player2RiotTagLine,
+		"Player2Rank", unpackedRequest.Player2Rank,
+		"Player2Role", unpackedRequest.Player2Role).Err()
+
+	if err != nil {
 		log.Printf("could not set participant info: %v", err)
-	}
-
-	// If the party doesn't exist, create it and add to the matchmaking set.
-	if err == redis.Nil {
-		err = rdb.HSet(ctx, unpackedRequest.PartyId,
-			"PartyId", unpackedRequest.PartyId,
-			"TeamCount", unpackedRequest.TeamCount,
-			"QueueType", unpackedRequest.QueueType,
-
-			"Player1Puuid", unpackedRequest.Player1Puuid,
-			"Player1RiotName", unpackedRequest.Player1RiotName,
-			"Player1RiotTagLine", unpackedRequest.Player1RiotTagLine,
-			"Player1Rank", unpackedRequest.Player1Rank,
-			"Player1Role", unpackedRequest.Player1Role,
-
-			"Player2Puuid", unpackedRequest.Player2Puuid,
-			"Player2RiotName", unpackedRequest.Player2RiotName,
-			"Player2RiotTagLine", unpackedRequest.Player2RiotTagLine,
-			"Player2Rank", unpackedRequest.Player2Rank,
-			"Player2Role", unpackedRequest.Player2Role).Err()
-
-		if err != nil {
-			log.Printf("could not set participant info: %v", err)
-		}
 	}
 }
 
 // Deletes ParyIDs from Redis for players who cancel queue
 func RemovePartyFromRedis(partyId string, rdb *redis.Client, ctx context.Context) {
-	err := rdb.Expire(ctx, partyId, 5*time.Second).Err()
+	err := rdb.Del(ctx, partyId).Err()
 	if err != nil {
 		log.Printf("could not delete participant info: %v", err)
 	}
