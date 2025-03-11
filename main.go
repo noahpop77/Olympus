@@ -111,14 +111,14 @@ func main() {
 	http.HandleFunc("/queueUp", instrumentedHandler("/queueUp", func(w http.ResponseWriter, r *http.Request) {
 		activeConnections.Inc()
 		defer activeConnections.Dec()
-		defer r.Body.Close()
+		defer r.Context().Done()
 		
 		unpackedRequest := matchmaking.UnpackRequest(w, r,)
 		if !matchmaking.UnpackedRequestValidation(unpackedRequest) {
 			http.Error(w, "Missing requried data in payload", http.StatusBadRequest)
 			return
 		}
-		
+
 		matchmaking.AddPartyToRedis(w, unpackedRequest, rdb, ctx)
 		
 		matchmakingContext, cancel := context.WithCancel(context.Background())
