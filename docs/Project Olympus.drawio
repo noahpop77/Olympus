@@ -1,4 +1,4 @@
-<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/26.0.16 Chrome/132.0.6834.196 Electron/34.2.0 Safari/537.36" version="26.0.16" pages="2">
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/26.0.16 Chrome/132.0.6834.196 Electron/34.2.0 Safari/537.36" version="26.0.16" pages="3">
   <diagram id="xDjnFaiKGvPRYY_QIi9u" name="Page-3">
     <mxGraphModel dx="9230" dy="4815" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
@@ -412,8 +412,8 @@
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram id="xX9wp8nP6hMXGvWU4-dB" name="Olympus">
-    <mxGraphModel dx="4372" dy="1486" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+  <diagram id="xX9wp8nP6hMXGvWU4-dB" name="Main Design Diagram">
+    <mxGraphModel dx="5471" dy="2176" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -1066,6 +1066,77 @@
         </mxCell>
         <mxCell id="4VdP7m3LmSOdqJwY2dNw-21" value="&lt;font&gt;Game Starts Load Screen&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" parent="1" vertex="1">
           <mxGeometry x="-1345" y="1060" width="240" height="40" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="FTcg5ob7QLARxS-FuQqk" name="Database Tables">
+    <mxGraphModel dx="3290" dy="1408" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="uG--2r4u-oXW9wnHfM-c-1" value="&lt;font style=&quot;font-size: 35px;&quot;&gt;Battle Pass&lt;/font&gt;" style="swimlane;whiteSpace=wrap;html=1;startSize=60;strokeWidth=5;strokeColor=#D60000;rounded=1;sketch=1;curveFitting=1;jiggle=2;" vertex="1" parent="1">
+          <mxGeometry x="190" y="700" width="580" height="310" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-4" value="&lt;font style=&quot;font-size: 35px;&quot;&gt;Match History&lt;/font&gt;" style="swimlane;whiteSpace=wrap;html=1;startSize=60;strokeWidth=5;strokeColor=#00A1FF;rounded=1;sketch=1;curveFitting=1;jiggle=2;" vertex="1" parent="1">
+          <mxGeometry x="-780" y="40" width="260" height="710" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-15" value="PUUID" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-4">
+          <mxGeometry x="30" y="80" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-16" value="&lt;font&gt;Game ID&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-4">
+          <mxGeometry x="30" y="140" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-17" value="&lt;font&gt;Game Version&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-4">
+          <mxGeometry x="30" y="200" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-24" value="&lt;font&gt;Game Duration (s)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-4">
+          <mxGeometry x="30" y="260" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-25" value="Game Creation Time" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-4">
+          <mxGeometry x="30" y="320" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-26" value="Queue Type" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-4">
+          <mxGeometry x="30" y="380" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-27" value="&lt;font&gt;Participant List&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-4">
+          <mxGeometry x="30" y="440" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-28" value="&lt;font&gt;Match Data List&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-4">
+          <mxGeometry x="30" y="500" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="aKKGu3nxgJH3whoOuMUe-2" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;Unique constraint is gameID in combination with the PUUID so no overlap if 2 different players have the same game in their match history&lt;/font&gt;" style="shape=note;size=20;whiteSpace=wrap;html=1;" vertex="1" parent="eMAQdgIvunvhnztX19SV-4">
+          <mxGeometry x="30" y="560" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-7" value="&lt;font style=&quot;font-size: 35px;&quot;&gt;Inventory&lt;/font&gt;" style="swimlane;whiteSpace=wrap;html=1;startSize=60;strokeWidth=5;strokeColor=#D60000;rounded=1;sketch=1;curveFitting=1;jiggle=2;" vertex="1" parent="1">
+          <mxGeometry x="190" y="370" width="580" height="310" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-8" value="&lt;font style=&quot;font-size: 35px;&quot;&gt;Store Offerings&lt;/font&gt;" style="swimlane;whiteSpace=wrap;html=1;startSize=60;strokeWidth=5;strokeColor=#D60000;rounded=1;sketch=1;curveFitting=1;jiggle=2;" vertex="1" parent="1">
+          <mxGeometry x="190" y="40" width="580" height="310" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-5" value="&lt;font style=&quot;font-size: 35px;&quot;&gt;Player Info&lt;/font&gt;" style="swimlane;whiteSpace=wrap;html=1;startSize=60;strokeWidth=5;strokeColor=#00A1FF;rounded=1;sketch=1;curveFitting=1;jiggle=2;" vertex="1" parent="1">
+          <mxGeometry x="-350" y="40" width="260" height="450" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-9" value="PUUID - PK" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#2CF891;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-5">
+          <mxGeometry x="30" y="80" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-10" value="&lt;font&gt;Riot Name&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-5">
+          <mxGeometry x="30" y="140" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-11" value="&lt;font&gt;Riot Tag&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-5">
+          <mxGeometry x="30" y="200" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-13" value="Rank #" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-5">
+          <mxGeometry x="30" y="260" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-20" value="&lt;font&gt;Wins&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-5">
+          <mxGeometry x="30" y="320" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="eMAQdgIvunvhnztX19SV-21" value="&lt;font&gt;Losses&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#00A1FF;strokeWidth=3;sketch=1;curveFitting=1;jiggle=2;fontSize=20;" vertex="1" parent="eMAQdgIvunvhnztX19SV-5">
+          <mxGeometry x="30" y="380" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="aKKGu3nxgJH3whoOuMUe-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;startArrow=classic;startFill=1;strokeWidth=8;shadow=0;sketch=1;curveFitting=1;jiggle=2;strokeColor=#2CF891;" edge="1" parent="1" source="eMAQdgIvunvhnztX19SV-9" target="eMAQdgIvunvhnztX19SV-15">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
