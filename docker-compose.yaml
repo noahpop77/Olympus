@@ -3,16 +3,16 @@ version: "3.8"
 services:
   redis:
     image: redis:latest
-    container_name: redis_db
+    container_name: matchmaking_redis
     restart: always
     ports:
       - "6379:6379"
 
-  go_server:
+  matchmaking_server:
     build:
       context: .
       dockerfile: Dockerfile  # Reference the separate Dockerfile
-    container_name: go_server
+    container_name: matchmaking_server
     restart: always
     depends_on:
       - redis
@@ -23,7 +23,7 @@ services:
     image: prom/prometheus
     container_name: prometheus
     depends_on:
-      - go_server
+      - matchmaking_server
     ports:
       - "9090:9090"
     command:

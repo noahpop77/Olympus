@@ -67,11 +67,16 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request) *party.Players {
 func UnpackedRequestValidation(unpackedRequest *party.Players) bool {
 
 	switch {
-	case len(unpackedRequest.Player1Puuid) < 20:
+	// This case must happen before unpackedRequest.PartyId[:6] != "PARTY_" otherwise you will get the error:
+	// slice bounds out of range [:6] with length 0
+	case len(unpackedRequest.PartyId) < 7:
 		return false
 	case unpackedRequest.PartyId[:6] != "PARTY_":
 		return false
-	case len(unpackedRequest.PartyId) < 7:
+	case unpackedRequest.QueueType != 420:
+		return false
+	
+	case len(unpackedRequest.Player1Puuid) < 20:
 		return false
 	case len(unpackedRequest.Player1RiotName) < 4:
 		return false
@@ -80,10 +85,22 @@ func UnpackedRequestValidation(unpackedRequest *party.Players) bool {
 	case unpackedRequest.Player1Rank > 44 && unpackedRequest.Player1Rank < 0:
 		return false
 	case unpackedRequest.Player1Role != "Middle" && unpackedRequest.Player1Role != "Top" && unpackedRequest.Player1Role != "Jungle" && unpackedRequest.Player1Role != "Bottom" && unpackedRequest.Player1Role != "Support":
-		return false 
-	}
+		return false
 	
-	return true
+	case len(unpackedRequest.Player2Puuid) < 20 && unpackedRequest.TeamCount != 1:
+		return false
+	case len(unpackedRequest.Player2RiotName) < 4 && unpackedRequest.TeamCount != 1:
+		return false
+	case len(unpackedRequest.Player2RiotTagLine) < 2 && unpackedRequest.TeamCount != 1:
+		return false
+	case unpackedRequest.Player2Rank > 44 && unpackedRequest.Player2Rank < 0 && unpackedRequest.TeamCount != 1:
+		return false
+	case unpackedRequest.Player2Role != "Middle" && unpackedRequest.Player2Role != "Top" && unpackedRequest.Player2Role != "Jungle" && unpackedRequest.Player2Role != "Bottom" && unpackedRequest.Player2Role != "Support" && unpackedRequest.TeamCount != 1:
+		return false
+	
+	default:
+		return true
+	}
 }
 
 // AddPartyToRedis handles party creation and Redis caching for the matchmaking request.

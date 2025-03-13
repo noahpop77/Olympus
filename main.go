@@ -95,7 +95,7 @@ func main() {
 	var redisAddr string
 
 	if IsRunningInDocker() {
-		redisAddr = "redis_db:6379"
+		redisAddr = "matchmaking_redis:6379"
 	} else {
 		redisAddr = "localhost:6379"
 	}
