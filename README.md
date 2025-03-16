@@ -33,3 +33,10 @@ if err := http.ListenAndServe(port, nil); err != nil {
 }
 ////////////////////////////////////////////////////////
 ```
+
+## Generate New Proto Scheme
+To generate a new protobuf scheme you can use the followign command after editing the .proto file of your choice
+
+```bash
+protoc --go_out=. --go_opt=paths=source_relative party.proto
+```

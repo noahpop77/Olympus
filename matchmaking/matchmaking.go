@@ -22,7 +22,7 @@ type PartyResources struct {
 
 // matchedParty holds information about a party match.
 type matchedParty struct {
-	Player1RiotName string
+	PlayerRiotName 	string
 	Key             string
 	Puuid           string
 	PlayerRank      string
@@ -32,16 +32,6 @@ type matchedParty struct {
 func WithinRankRange(myRank, teamRank int) bool {
 	diff := myRank - teamRank
 	return diff < 4 && diff > -4
-}
-
-// SimulateQueueTimer simulates a timer while the player is in queue.
-func SimulateQueueTimer(w http.ResponseWriter, r *http.Request, unpackedRequest *party.Players) {
-	for i := 1; i <= 5; i++ {
-		time.Sleep(1 * time.Second)
-		if i%5 == 0 {
-			fmt.Printf("%s Queue Timer: %d\n", unpackedRequest.Player1RiotName, i)
-		}
-	}
 }
 
 // UnpackRequest unpacks the Protobuf data into a party.Players structure.
@@ -75,27 +65,15 @@ func UnpackedRequestValidation(unpackedRequest *party.Players) bool {
 		return false
 	case unpackedRequest.QueueType != 420:
 		return false
-	
-	case len(unpackedRequest.Player1Puuid) < 20:
+	case len(unpackedRequest.PlayerPuuid) < 20:
 		return false
-	case len(unpackedRequest.Player1RiotName) < 4:
+	case len(unpackedRequest.PlayerRiotName) < 4:
 		return false
-	case len(unpackedRequest.Player1RiotTagLine) < 2:
+	case len(unpackedRequest.PlayerRiotTagLine) < 2:
 		return false
-	case unpackedRequest.Player1Rank > 44 && unpackedRequest.Player1Rank < 0:
+	case unpackedRequest.PlayerRank > 44 && unpackedRequest.PlayerRank < 0:
 		return false
-	case unpackedRequest.Player1Role != "Middle" && unpackedRequest.Player1Role != "Top" && unpackedRequest.Player1Role != "Jungle" && unpackedRequest.Player1Role != "Bottom" && unpackedRequest.Player1Role != "Support":
-		return false
-	
-	case len(unpackedRequest.Player2Puuid) < 20 && unpackedRequest.TeamCount != 1:
-		return false
-	case len(unpackedRequest.Player2RiotName) < 4 && unpackedRequest.TeamCount != 1:
-		return false
-	case len(unpackedRequest.Player2RiotTagLine) < 2 && unpackedRequest.TeamCount != 1:
-		return false
-	case unpackedRequest.Player2Rank > 44 && unpackedRequest.Player2Rank < 0 && unpackedRequest.TeamCount != 1:
-		return false
-	case unpackedRequest.Player2Role != "Middle" && unpackedRequest.Player2Role != "Top" && unpackedRequest.Player2Role != "Jungle" && unpackedRequest.Player2Role != "Bottom" && unpackedRequest.Player2Role != "Support" && unpackedRequest.TeamCount != 1:
+	case unpackedRequest.PlayerRole != "Middle" && unpackedRequest.PlayerRole != "Top" && unpackedRequest.PlayerRole != "Jungle" && unpackedRequest.PlayerRole != "Bottom" && unpackedRequest.PlayerRole != "Support":
 		return false
 	
 	default:
@@ -108,20 +86,12 @@ func AddPartyToRedis(w http.ResponseWriter, unpackedRequest *party.Players, rdb 
 	
 	err := rdb.HSet(ctx, unpackedRequest.PartyId,
 		"PartyId", unpackedRequest.PartyId,
-		"TeamCount", unpackedRequest.TeamCount,
 		"QueueType", unpackedRequest.QueueType,
-
-		"Player1Puuid", unpackedRequest.Player1Puuid,
-		"Player1RiotName", unpackedRequest.Player1RiotName,
-		"Player1RiotTagLine", unpackedRequest.Player1RiotTagLine,
-		"Player1Rank", unpackedRequest.Player1Rank,
-		"Player1Role", unpackedRequest.Player1Role,
-
-		"Player2Puuid", unpackedRequest.Player2Puuid,
-		"Player2RiotName", unpackedRequest.Player2RiotName,
-		"Player2RiotTagLine", unpackedRequest.Player2RiotTagLine,
-		"Player2Rank", unpackedRequest.Player2Rank,
-		"Player2Role", unpackedRequest.Player2Role).Err()
+		"PlayerPuuid", unpackedRequest.PlayerPuuid,
+		"PlayerRiotName", unpackedRequest.PlayerRiotName,
+		"PlayerRiotTagLine", unpackedRequest.PlayerRiotTagLine,
+		"PlayerRank", unpackedRequest.PlayerRank,
+		"PlayerRole", unpackedRequest.PlayerRole).Err()
 
 	if err != nil {
 		log.Printf("could not set participant info: %v", err)
@@ -140,7 +110,7 @@ func RemovePartyFromRedis(partyId string, rdb *redis.Client, ctx context.Context
 // If the party is a valid match, it adds its information (including its key) to the matched slice.
 func processParty(ctx context.Context, rdb *redis.Client, unpackedRequest *party.Players, key string, matches *[]matchedParty) error {
 
-	tempRank, err := rdb.HGet(ctx, key, "Player1Rank").Result()
+	tempRank, err := rdb.HGet(ctx, key, "PlayerRank").Result()
 	if err != nil {
 		log.Printf("failed to get hash data for key %s: %v", key, err)
 		return err
@@ -152,21 +122,21 @@ func processParty(ctx context.Context, rdb *redis.Client, unpackedRequest *party
 	teammateRank, err := strconv.Atoi(tempRank)
 
 	// Check rank constraints.
-	if WithinRankRange(int(unpackedRequest.Player1Rank), teammateRank) {
+	if WithinRankRange(int(unpackedRequest.PlayerRank), teammateRank) {
 		hashData, err := rdb.HGetAll(ctx, key).Result()
 		if err != nil {
 			log.Printf("failed to get hash data for key %s: %v", key, err)
 			return err
 		}
-		if hashData["Player1RiotName"] == unpackedRequest.Player1RiotName {
+		if hashData["PlayerRiotName"] == unpackedRequest.PlayerRiotName {
 			return nil
 		}
 
 		*matches = append(*matches, matchedParty{
-			Player1RiotName: hashData["Player1RiotName"],
+			PlayerRiotName: hashData["PlayerRiotName"],
 			Key:             key,
-			Puuid:           hashData["Player1Puuid"],
-			PlayerRank:      hashData["Player1Rank"],
+			Puuid:           hashData["PlayerPuuid"],
+			PlayerRank:      hashData["PlayerRank"],
 		})
 		return nil
 	}
@@ -235,9 +205,9 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 		return false
 	}
 
-	responseText := fmt.Sprintf("Match found for %s! - ", unpackedRequest.Player1RiotName)
+	responseText := fmt.Sprintf("Match found for %s! - ", unpackedRequest.PlayerRiotName)
 	for i := 0; i < 9; i++ {
-		responseText += fmt.Sprintf("%s, ", matchedParties[i].Player1RiotName)
+		responseText += fmt.Sprintf("%s, ", matchedParties[i].PlayerRiotName)
 	}
 	responseText += "\n"
 
@@ -285,7 +255,7 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 		// Notifies client on predefined timer to not eat all compute resources
 		case <-ticker.C:
 
-			lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.Player1RiotName)
+			lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.PlayerRiotName)
 			_, err := w.Write([]byte(lfgResponse))
 			if err != nil {
 				return

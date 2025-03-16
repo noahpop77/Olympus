@@ -57,20 +57,6 @@ var (
 			Help: "Number of players currently connected to /queueUp",
 		},
 	)
-
-	cacheHits = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "queueup_active_players",
-			Help: "Number of players currently connected to /queueUp",
-		},
-	)
-
-	cacheMisses = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "queueup_active_players",
-			Help: "Number of players currently connected to /queueUp",
-		},
-	)
 )
 
 func init() {

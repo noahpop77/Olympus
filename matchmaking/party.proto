@@ -6,18 +6,11 @@ package party;
 option go_package = "./matchmaking/party";
 
 message Players {
-    string Player1riotName = 1;
-    string Player1riotTagLine = 2;
-    int32 Player1rank = 3;
-    string Player1role = 4;
-    string Player1puuid = 5;
-    string Player2riotName = 6;
-    string Player2riotTagLine = 7;
-    int32 Player2rank = 8;
-    string Player2role = 9;
-    string Player2puuid = 10;
-        
-    string partyId = 11;
-    int32 teamCount = 12;
-    int32 queueType = 13;
+    string  playerRiotName = 1;
+    string  playerRiotTagLine = 2;
+    int32   playerRank = 3;
+    string  playerRole = 4;
+    string  playerPuuid = 5;
+    string  partyId = 6;
+    int32   queueType = 7;
 }
