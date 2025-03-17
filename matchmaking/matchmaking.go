@@ -102,7 +102,7 @@ func AddPartyToRedis(w http.ResponseWriter, unpackedRequest *party.Players, rdb 
 func RemovePartyFromRedis(partyId string, rdb *redis.Client, ctx context.Context) {
 	err := rdb.Del(ctx, partyId).Err()
 	if err != nil {
-		log.Printf("could not delete participant info: %v", err)
+		log.Printf("could not delete: %v", err)
 	}
 }
 
@@ -112,9 +112,10 @@ func processParty(ctx context.Context, rdb *redis.Client, unpackedRequest *party
 
 	tempRank, err := rdb.HGet(ctx, key, "PlayerRank").Result()
 	if err != nil {
-		log.Printf("failed to get hash data for key %s: %v", key, err)
+		// log.Printf("failed to hget data for key %s: %v", key, err)
 		return err
 	}
+
 	if len(tempRank) == 0 {
 		return nil
 	}
@@ -147,15 +148,12 @@ func processParty(ctx context.Context, rdb *redis.Client, unpackedRequest *party
 // MatchmakingSelection concurrently processes all parties to build a matched team.
 // When a team is found (9 matches in addition to the initiating party), the corresponding Redis keys are deleted.
 func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context, partyResourcesMap *sync.Map, mu *sync.Mutex) bool {
-	var matchedParties []matchedParty
 
-	// Main mutex
+	var matchedParties []matchedParty
 	mu.Lock()
 	defer mu.Unlock()
 
-	// Takes steps as its scanning through the database of 100 keys at a time to not
-	// lock up the Redis database if we were to scan the whole thing in 1 go for no
-	// reason. 100 keys at a time steps.
+	// Steps through the db 100 keys at a time. Full Scans locks DB.
 	var newCursor uint64
 	for len(matchedParties) < 9 {
 		keys, nextCursor, err := rdb.Scan(ctx, newCursor, "*", 100).Result()
@@ -169,7 +167,9 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 				break
 			}
 			err := processParty(ctx, rdb, unpackedRequest, key, &matchedParties)
-			if err != nil {
+			if err == redis.Nil {
+				continue
+			} else if err != nil {
 				log.Printf("Error processing key %s: %v", key, err)
 				return false
 			}
@@ -194,16 +194,12 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 		return false
 	}
 
-	// Deletes keys for teammates
-	if err := rdb.Del(ctx, delKeys...).Err(); err != nil {
-		log.Printf("Error deleting matched keys: %v", err)
-		return false
+
+	for _, key := range delKeys {
+		RemovePartyFromRedis(key, rdb, ctx)
 	}
-	// Deletes keys for Anchor being
-	if err := rdb.Del(ctx, unpackedRequest.PartyId).Err(); err != nil {
-		log.Printf("Error anchor being: %v", err)
-		return false
-	}
+	RemovePartyFromRedis(unpackedRequest.PartyId, rdb, ctx)
+
 
 	responseText := fmt.Sprintf("Match found for %s! - ", unpackedRequest.PlayerRiotName)
 	for i := 0; i < 9; i++ {
@@ -237,7 +233,7 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 		return
 	}
 
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 
 	// Main event loop for matchmaking
@@ -255,12 +251,12 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *red
 		// Notifies client on predefined timer to not eat all compute resources
 		case <-ticker.C:
 
-			lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.PlayerRiotName)
-			_, err := w.Write([]byte(lfgResponse))
-			if err != nil {
-				return
-			}
-			flusher.Flush()
+			// lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.PlayerRiotName)
+			// _, err := w.Write([]byte(lfgResponse))
+			// if err != nil {
+			// 	return
+			// }
+			// flusher.Flush()
 
 			if MatchmakingSelection(w, unpackedRequest, rdb, ctx, partyResourcesMap, mu) {
 				flusher.Flush()
