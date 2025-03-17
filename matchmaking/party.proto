@@ -14,3 +14,8 @@ message Players {
     string  partyId = 6;
     int32   queueType = 7;
 }
+
+message MatchResponse {
+    string matchID = 1;
+    repeated string participants = 2;
+}

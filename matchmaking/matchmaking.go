@@ -2,9 +2,9 @@ package matchmaking
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"sync"
@@ -200,20 +200,32 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 	}
 	RemovePartyFromRedis(unpackedRequest.PartyId, rdb, ctx)
 
-
-	responseText := fmt.Sprintf("Match found for %s! - ", unpackedRequest.PlayerRiotName)
-	for i := 0; i < 9; i++ {
-		responseText += fmt.Sprintf("%s, ", matchedParties[i].PlayerRiotName)
+	// Protobuf format for message 
+	response := &party.MatchResponse{
+		MatchID:      generateMatchID(),
+		Participants: []string{},
 	}
-	responseText += "\n"
 
-	w.Write([]byte(responseText))
+	response.Participants = append(response.Participants, unpackedRequest.PlayerRiotName)
+	for i := 0; i < 9; i++ {
+		response.Participants = append(response.Participants, matchedParties[i].PlayerRiotName)
+	}
+
+	// data, err := json.Marshal(responseRequest)
+	data, err := proto.Marshal(response)
+	if err != nil {
+		log.Printf("Failed to marshal responseRequest: %v", err)
+		return false
+	}
+
+	w.Header().Set("Content-Type", "application/x-protobuf")
+	w.Write(data)
 
 	// Finishes off and cleans up the connections for teammates
 	for _, partyKey := range delKeys {
 		if partyCtx, ok := partyResourcesMap.Load(partyKey); ok {
 			if ctx, ok := partyCtx.(PartyResources); ok {
-				ctx.Writer.Write([]byte(responseText))
+				ctx.Writer.Write(data)
 				ctx.CancelFunc()
 			}
 		}
@@ -223,6 +235,19 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *party.Players,
 
 	return true
 
+}
+
+func generateMatchID() string {
+	const charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+	src := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(src)
+
+	id := make([]byte, 10)
+	for i := range id {
+		id[i] = charset[r.Intn(len(charset))]
+	}
+	return "MATCH_" + string(id)
 }
 
 func MatchFinder(w http.ResponseWriter, unpackedRequest *party.Players, rdb *redis.Client, ctx context.Context, partyResourcesMap *sync.Map, matchmakingContext context.Context, requester *http.Request, mu *sync.Mutex) {
