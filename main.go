@@ -92,6 +92,7 @@ func main() {
 		DB:       0,
 	})
 
+	// Metrics endpoint Prometheus uses to scrape data from matchmaking service
 	http.Handle("/metrics", promhttp.Handler())
 
 	http.HandleFunc("/queueUp", instrumentedHandler("/queueUp", func(w http.ResponseWriter, r *http.Request) {
