@@ -12,7 +12,7 @@ The matchmaking service will mimic a stripped down version of the League of Lege
 # Simulated Game Executable Service
 This service serves to simulate the Game Server Executable that is what is deployed in the Riot Games Valorant load test where once the players are matched they can play the game. This executable is what manages the actual in game functions. Since this is a load test platform that serves to simulate the actual network It would not help if this was the bottleneck and if a large amount of development time was eaten up. Rather than a REAL game server executable, this service simulates the behavior, manages the connections for the conneceted players, and produces randomized match results.
 
-![Matchmaking to Game Server Flow](docs/images/gameServerConnectionFlow.png)
+![Matchmaking to Game Server Flow](docs/images/gameServerFlow.png)
 
 ## Player Selection Method - "Anchor Being"
 At the moment there is no complicated matching algorithm in place being used to match players. Each player will search for their own set of team mates, essentially treating themselves as the anchor. Once they are finishes combing through the Redis database for matching possible teammates we notify all selected parties that they have been selected and send them whatever we need to.
