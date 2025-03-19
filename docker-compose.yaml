@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-  redis:
+  matchmaking_redis:
     image: redis:latest
     container_name: matchmaking_redis
     restart: always
@@ -11,24 +11,34 @@ services:
 
   matchmaking_server:
     build:
-      context: .
-      dockerfile: Dockerfile  # Reference the separate Dockerfile
+      context: ./matchmaking_service/
+      dockerfile: Dockerfile
     container_name: matchmaking_server
     restart: always
     depends_on:
-      - redis
+      - matchmaking_redis
     ports:
       - "8080:8080"
   
+  game_server:
+    build:
+      context: ./game_server_service/
+      dockerfile: Dockerfile
+    container_name: game_server
+    restart: always
+    ports:
+      - "8081:8081"
+    
   prometheus:
     image: prom/prometheus
     container_name: prometheus
     depends_on:
       - matchmaking_server
+      - game_server
     ports:
       - "9090:9090"
     command:
-    - "--log.level=error"  # Set the log level to debug
+    - "--log.level=error"
     - "--config.file=/etc/prometheus/prometheus.yml"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml

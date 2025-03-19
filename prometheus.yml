@@ -5,3 +5,7 @@ scrape_configs:
   - job_name: "matchmaking_service"
     static_configs:
       - targets: ["matchmaking_server:8080"]
+
+  - job_name: "game_server_service"
+    static_configs:
+      - targets: ["game_server:8081"]

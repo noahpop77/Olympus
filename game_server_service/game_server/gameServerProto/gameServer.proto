@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package gameServerProto;
+
+// The go_package option specifies the import path for the generated Go code.
+option go_package = "./gameServerProto";
+
+message MatchCreation {
+    string matchID = 1;
+    repeated string participantsPUUID = 2;
+}
+
+message MatchConnection {
+    string matchID = 1;
+    string participantPUUID = 2;
+}
+
+message MatchResult {
+    string matchID = 1;
+    string gameVersion = 2;
+    string gameDuration = 3;
+    string gameStartTime = 4; 
+    string gameEndTime = 5;
+    repeated string teamOnePUUID = 6;
+    repeated string teamTwoPUUID = 7;
+    repeated Participant participants = 8;
+    string winners = 9;
+}
+
+message Perk {
+    string perk = 1;
+}
+
+message Selection {
+    string perk = 1;
+}
+
+message Style {
+    repeated Selection selections = 1;
+}
+
+message Perks {
+    repeated Style styles = 1;
+}
+
+message Participant {
+    int32 assists = 1;
+    int32 champ_experience = 2;
+    int32 champ_level = 3;
+    int32 champion_id = 4;
+    string champion_name = 5;
+    int32 deaths = 6;
+    int32 gold_earned = 7;
+    string item0 = 8;
+    string item1 = 9;
+    string item2 = 10;
+    string item3 = 11;
+    string item4 = 12;
+    string item5 = 13;
+    string item6 = 14;
+    int32 kills = 15;
+    int32 neutral_minions_killed = 16;
+    Perks perks = 17;
+    string riot_id_game_name = 18;
+    string riot_id_tagline = 19;
+    string summoner1_id = 20;
+    string summoner2_id = 21;
+    string summoner_name = 22;
+    int32 team_id = 23;
+    int32 total_ally_jungle_minions_killed = 24;
+    int32 total_damage_dealt_to_champions = 25;
+    int32 total_enemy_jungle_minions_killed = 26;
+    int32 total_minions_killed = 27;
+    int32 vision_score = 28;
+    bool win = 29;
+}
