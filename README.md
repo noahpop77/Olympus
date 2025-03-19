@@ -36,19 +36,7 @@ This is a high level design diagram detailing a some requirements for specific c
 
 # Personal Notes
 
-These two statements are equivilent. The differences are that the bottom conditional is more concise and that the err variable is exclusive to the conditionals scope.
-```go
-////////////////////////////////////////////////////////
-err := http.ListenAndServe(port, nil)
-if err != nil {
-    log.Fatalf("Error starting server: %v\n", err)
-}
-////////////////////////////////////////////////////////
-if err := http.ListenAndServe(port, nil); err != nil {
-    log.Fatalf("Error starting server: %v\n", err)
-}
-////////////////////////////////////////////////////////
-```
+Personal scratchpad for random facts, links, notes, or points of note.
 
 ## Generate New Proto Scheme
 To generate a new protobuf scheme you can use the followign command after editing the .proto file of your choice

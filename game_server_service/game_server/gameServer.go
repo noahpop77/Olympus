@@ -60,7 +60,7 @@ func UnpackConnectionRequest(w http.ResponseWriter, r *http.Request) (*gameServe
 	return &unpackedRequest, nil
 }
 
-func ConnectPlayerToMatch(activeMatches *sync.Map, match *gameServerProto.MatchCreation) ([]byte, error) {
+func ConnectPlayerToMatch(activeMatches *sync.Map, match *gameServerProto.MatchCreation) (*gameServerProto.MatchResult, error) {
 	
 	// Main loop tracking if player has connected or not
 	for {
@@ -69,15 +69,11 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, match *gameServerProto.MatchC
 			gameCreationUnixTime := time.Now().Unix()
 
 			// Simulated game timer
-			time.Sleep(300 * time.Second)
+			time.Sleep(10 * time.Second)
 
 			// Generated randomized match data
 			completedMatch := generateRandomMatchData(gameCreationUnixTime, match)
-			data, err := proto.Marshal(completedMatch)
-			if err != nil {
-				return nil, err
-			}
-			return data, nil
+			return completedMatch, nil
 		}
 
 		// Arbitrary sleep to not eat up too much cpu resource

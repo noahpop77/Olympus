@@ -35,6 +35,7 @@ services:
     depends_on:
       - matchmaking_server
       - game_server
+      - postgres
     ports:
       - "9090:9090"
     command:
@@ -56,6 +57,21 @@ services:
     volumes:
       - ./grafana_data:/var/lib/grafana
 
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: sawa
+      POSTGRES_PASSWORD: sawa
+      POSTGRES_DB: olympus
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./dbScripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    
 volumes:
   prometheus_data:
   grafana_data:
+  postgres_data:

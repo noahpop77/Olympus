@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	gameServer "github.com/noahpop77/Olympus/game_server_service/game_server"
 	"github.com/noahpop77/Olympus/game_server_service/game_server/gameServerProto"
 
@@ -118,16 +121,58 @@ func main() {
 			// Loops through match PUUIDs in requested match ID to find out if you are in it
 			for _, value := range match.ParticipantsPUUID {
 				if value == unpackedRequest.ParticipantPUUID {
-					data, err := gameServer.ConnectPlayerToMatch(&activeMatches, match)
+					randomMatch, err := gameServer.ConnectPlayerToMatch(&activeMatches, match)
 					if err != nil {
 						http.Error(w, "Failed to connect player to match", http.StatusInternalServerError)
 						return
 					}
-					w.Header().Set("Content-Type", "application/x-protobuf")
-					w.Write(data)
+
+					// randomMatchData, err := proto.Marshal(randomMatch)
+					// if err != nil {
+					// 	return
+					// }
+					// w.Header().Set("Content-Type", "application/x-protobuf")
+					// w.Write(randomMatchData)
 
 					// Send a request to a database containing the results of the match
 					// 
+
+					dsn := "postgres://sawa:sawa@postgres:5432/olympus"
+					conn, err := pgx.Connect(context.Background(), dsn)
+					if err != nil {
+						log.Fatalf("Unable to connect to database: %v\n", err)
+					}
+					defer conn.Close(context.Background())
+
+					participantJsonData, err := json.Marshal(randomMatch.Participants)
+					if err != nil {
+						log.Fatalf("Failed to convert to JSON: %v", err)
+					}
+
+					// Define match data
+					matchID := randomMatch.MatchID
+					gameVer := randomMatch.GameVersion
+					riotID := unpackedRequest.ParticipantPUUID
+					gameDuration := randomMatch.GameDuration
+					gameCreationTimestamp := randomMatch.GameStartTime
+					gameEndTimestamp := randomMatch.GameEndTime
+					teamOnePUUID := randomMatch.TeamOnePUUID
+					teamTwoPUUID := randomMatch.TeamTwoPUUID
+					participants := participantJsonData
+
+					// Execute INSERT query
+					_, err = conn.Exec(context.Background(),
+						`INSERT INTO "matchHistory" 
+						("matchID", "gameVer", "riotID", "gameDuration", "gameCreationTimestamp", "gameEndTimestamp", "teamOnePUUID", "teamTwoPUUID", "participants") 
+						VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+						matchID, gameVer, riotID, gameDuration, gameCreationTimestamp, gameEndTimestamp, teamOnePUUID, teamTwoPUUID, participants)
+
+					if err != nil {
+						log.Fatalf("Insert failed: %v\n", err)
+					}
+
+					w.Header().Set("Content-Type", "application/x-protobuf")
+					w.Write([]byte("Database insert performed"))
 
 					return
 				}
