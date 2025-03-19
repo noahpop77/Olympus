@@ -137,6 +137,10 @@ func main() {
 					// Send a request to a database containing the results of the match
 					// 
 
+					// TODO: I NEED TO SEND THE REQUESTS TO THE DATABASE IN BATCHES
+					// OF 10 SO THAT WHEN ONE LOBBY FINISHES, THE MATCH HISTORY FOR
+					// ALL OF THE PLAYERS IN THAT GAME IS UPDATED AT ONCE
+
 					dsn := "postgres://sawa:sawa@postgres:5432/olympus"
 					conn, err := pgx.Connect(context.Background(), dsn)
 					if err != nil {

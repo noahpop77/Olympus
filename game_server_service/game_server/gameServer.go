@@ -3,6 +3,7 @@ package gameServer
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -68,8 +69,14 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, match *gameServerProto.MatchC
 			// Used in calculating the creation time and duration inside of the generated rnadom match
 			gameCreationUnixTime := time.Now().Unix()
 
+			source := rand.NewSource(time.Now().UnixNano())
+			r := rand.New(source)
+			min := 100
+			max := 500
+			randomInt := r.Intn(max-min+1) + min
+
 			// Simulated game timer
-			time.Sleep(10 * time.Second)
+			time.Sleep(time.Duration(randomInt) * time.Second)
 
 			// Generated randomized match data
 			completedMatch := generateRandomMatchData(gameCreationUnixTime, match)
