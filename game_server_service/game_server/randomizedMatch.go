@@ -2,6 +2,7 @@ package gameServer
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -10,8 +11,15 @@ import (
 	"github.com/noahpop77/Olympus/game_server_service/game_server/gameServerProto"
 )
 
+/*
+	Sets the shared match data in the sync.map for the given match for all 10 participants
+*/
 func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUnixTime int64, TeamOnePUUIDStruct []string, TeamTwoPUUIDStruct []string, rng *rand.Rand) {
-    value, _ := activeMatches.Load(matchID)
+    value, ok := activeMatches.Load(matchID)
+	if !ok {
+		log.Printf("Type assertion failed for MatchResult")
+		return
+	}
 
     var participants *gameServerProto.MatchResult
     if value != nil {
@@ -41,8 +49,13 @@ func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUni
 	}
 }
 
+/*
+	Generates gameData for the match. This includes creating the player specific participant
+	data as well as the match data section if it has not already been made
+*/
 func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap *sync.Map, matchDataMap *sync.Map) {
 
+	// Building blocks for data fields
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	gameEndUnixTime := time.Now().Unix()
 	itemIDs := getRandomItems(7)
@@ -50,7 +63,8 @@ func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap
 	var TeamOnePUUIDStruct []string
 	var TeamTwoPUUIDStruct []string
 
-	for i := 0; i < 10; i++{
+	// Appends the PUUIDs of the players in the lobby into teamOne and teamTwo fields
+	for i := 0; i < 10; i++ {
 		if i < 5 {
 			TeamOnePUUIDStruct = append(TeamOnePUUIDStruct, match.ParticipantsPUUID[i])
 		} else {
@@ -59,10 +73,14 @@ func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap
 		}
 	}
 
+	// Match data
 	generateRandomMatchData(match.MatchID, matchDataMap, gameEndUnixTime,TeamOnePUUIDStruct, TeamTwoPUUIDStruct, rng)
 
+	// Gets a random champion name and ID for use in the following participant strucuture
 	champID, champName := getRandomChamp(rng)
 
+	// Participant structure that will house the randomized data and passes it to 
+	// the addParticipant function to append to the participant sync map
 	addParticipant(match.MatchID, matchParticipantsMap, &gameServerProto.Participant{
 		Assists:                       int32(rng.Intn(25)),
 		ChampExperience:               int32(rng.Intn(12576)),
@@ -103,7 +121,8 @@ func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap
 
 }
 
-
+// Helper function that akes in a matchID used for a key in the sync.map, 
+// a participant sync.map, and a participant with their randomized data
 func addParticipant(matchID string, matchParticipantsMap *sync.Map, participant *gameServerProto.Participant) {
     value, _ := matchParticipantsMap.Load(matchID)
 
@@ -116,10 +135,10 @@ func addParticipant(matchID string, matchParticipantsMap *sync.Map, participant 
     matchParticipantsMap.Store(matchID, participants)
 }
 
-// Based off of the letters string we can generate random strings based off a provided
-// length and the characters provided
-const letters = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+// Based off of the letters string we can generate random strings 
+// based off a provided length and the characters provided
 func RandomString(rng *rand.Rand, length int) string {
+	const letters = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	result := make([]byte, length)
 	for i := range result {
 		result[i] = letters[rng.Intn(len(letters))]
@@ -127,7 +146,7 @@ func RandomString(rng *rand.Rand, length int) string {
 	return string(result)
 }
 
-
+// Self explanitory
 func getRandomChamp(rng *rand.Rand) (int, string) {
 	champions := map[string]string{
 		"Aatrox":      "266",
