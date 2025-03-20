@@ -2,7 +2,6 @@ package gameServer
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -15,13 +14,8 @@ import (
 	Sets the shared match data in the sync.map for the given match for all 10 participants
 */
 func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUnixTime int64, TeamOnePUUIDStruct []string, TeamTwoPUUIDStruct []string, rng *rand.Rand) {
-    value, ok := activeMatches.Load(matchID)
-	if !ok {
-		log.Printf("Type assertion failed for MatchResult")
-		return
-	}
-
     var participants *gameServerProto.MatchResult
+    value, _ := activeMatches.Load(matchID)
     if value != nil {
         participants = value.(*gameServerProto.MatchResult)
     } else {

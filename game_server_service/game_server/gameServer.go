@@ -3,6 +3,7 @@ package gameServer
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
@@ -12,20 +13,21 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Base function for forms of unpacking requests
 func UnpackRequest(w http.ResponseWriter, r *http.Request, protoMessage proto.Message) error {
 	if r.Method != http.MethodPost {
-		return fmt.Errorf("invalid method")
+		return fmt.Errorf("invalid method and expecting POST but got: %v", r.Method)
 	}
 
 	data, err := io.ReadAll(r.Body)
 	if err != nil {
-		return fmt.Errorf("error reading body: %v", err)
+		return fmt.Errorf("error reading body from %s: %v", r.URL.Path, err)
 	}
 
 	// Unmarshal into the provided proto message type
 	err = proto.Unmarshal(data, protoMessage)
 	if err != nil {
-		return fmt.Errorf("error unmarshalling data: %v", err)
+		return fmt.Errorf("error unmarshalling data from %s: %v", r.URL.Path, err)
 	}
 
 	return nil
@@ -62,7 +64,7 @@ func UnpackConnectionRequest(w http.ResponseWriter, r *http.Request) (*gameServe
 }
 
 
-
+// Main functional loop handling connection function
 func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match *gameServerProto.MatchCreation, matchParticipantsMap *sync.Map) error {
 	
 	// Main loop tracking if player has connected or not
@@ -78,10 +80,20 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 			for {
 				time.Sleep(250 * time.Millisecond)
 
-				participantValue, _ := matchParticipantsMap.Load(match.MatchID)
+				participantValue, ok := matchParticipantsMap.Load(match.MatchID)
+				if !ok {
+					log.Printf("Failed to load participants for match ID %s\n", match.MatchID)
+					continue
+				}
+
 				var randomParticipants []*gameServerProto.Participant
 				if participantValue != nil {
-					randomParticipants = participantValue.([]*gameServerProto.Participant)
+					randomParticipants, ok = participantValue.([]*gameServerProto.Participant)
+					if !ok {
+						// Handle type assertion failure
+						log.Printf("Invalid participant data for match ID %s\n", match.MatchID)
+						continue
+					}
 				}
 
 				if len(randomParticipants) != 10 {
@@ -92,7 +104,7 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 					if value != nil {
 						matchData = value.(*gameServerProto.MatchResult)
 					}
-
+					
 					gameDuration, _ := strconv.Atoi(matchData.GameDuration)
 					time.Sleep(time.Duration(gameDuration) * time.Second)
 					break
