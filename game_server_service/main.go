@@ -81,6 +81,8 @@ func init() {
 func main() {
 	// var mu sync.Mutex
 	var activeMatches sync.Map
+	var matchDataMap sync.Map
+	var matchParticipantsMap sync.Map
 
 	// Endpoint used to expose prometheus metrics
 	http.Handle("/metrics", promhttp.Handler())
@@ -121,7 +123,7 @@ func main() {
 			// Loops through match PUUIDs in requested match ID to find out if you are in it
 			for _, value := range match.ParticipantsPUUID {
 				if value == unpackedRequest.ParticipantPUUID {
-					randomMatch, err := gameServer.ConnectPlayerToMatch(&activeMatches, match)
+					err := gameServer.ConnectPlayerToMatch(&activeMatches, &matchDataMap, match, &matchParticipantsMap)
 					if err != nil {
 						http.Error(w, "Failed to connect player to match", http.StatusInternalServerError)
 						return
@@ -148,7 +150,19 @@ func main() {
 					}
 					defer conn.Close(context.Background())
 
-					participantJsonData, err := json.Marshal(randomMatch.Participants)
+					value, _ := matchDataMap.Load(match.MatchID)
+					var randomMatch *gameServerProto.MatchResult
+					if value != nil {
+						randomMatch = value.(*gameServerProto.MatchResult)
+					}
+
+					participantValue, _ := matchParticipantsMap.Load(match.MatchID)
+					var randomParticipants []*gameServerProto.Participant
+					if participantValue != nil {
+						randomParticipants = participantValue.([]*gameServerProto.Participant)
+					}
+
+					participantJsonData, err := json.Marshal(randomParticipants)
 					if err != nil {
 						log.Fatalf("Failed to convert to JSON: %v", err)
 					}

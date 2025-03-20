@@ -3,8 +3,8 @@ package gameServer
 import (
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -61,29 +61,46 @@ func UnpackConnectionRequest(w http.ResponseWriter, r *http.Request) (*gameServe
 	return &unpackedRequest, nil
 }
 
-func ConnectPlayerToMatch(activeMatches *sync.Map, match *gameServerProto.MatchCreation) (*gameServerProto.MatchResult, error) {
+
+
+func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match *gameServerProto.MatchCreation, matchParticipantsMap *sync.Map) error {
 	
 	// Main loop tracking if player has connected or not
 	for {
-		if len(match.ParticipantsPUUID) == 10 {
-			// Used in calculating the creation time and duration inside of the generated rnadom match
-			gameCreationUnixTime := time.Now().Unix()
+		if len(match.ParticipantsPUUID) != 10 {
+			// Arbitrary sleep to not eat up too much cpu resource
+			time.Sleep(250 * time.Millisecond)
+			continue
+		} else {
+			
+			generateGameData(match, matchParticipantsMap, matchDataMap)
 
-			source := rand.NewSource(time.Now().UnixNano())
-			r := rand.New(source)
-			min := 100
-			max := 500
-			randomInt := r.Intn(max-min+1) + min
+			for {
+				time.Sleep(250 * time.Millisecond)
 
-			// Simulated game timer
-			time.Sleep(time.Duration(randomInt) * time.Second)
+				participantValue, _ := matchParticipantsMap.Load(match.MatchID)
+				var randomParticipants []*gameServerProto.Participant
+				if participantValue != nil {
+					randomParticipants = participantValue.([]*gameServerProto.Participant)
+				}
 
-			// Generated randomized match data
-			completedMatch := generateRandomMatchData(gameCreationUnixTime, match)
-			return completedMatch, nil
+				if len(randomParticipants) != 10 {
+					continue
+				} else {
+					value, _ := matchDataMap.Load(match.MatchID)
+					var matchData *gameServerProto.MatchResult
+					if value != nil {
+						matchData = value.(*gameServerProto.MatchResult)
+					}
+
+					gameDuration, _ := strconv.Atoi(matchData.GameDuration)
+					time.Sleep(time.Duration(gameDuration) * time.Second)
+					break
+				}
+			}
+
+			return nil
+		
 		}
-
-		// Arbitrary sleep to not eat up too much cpu resource
-		time.Sleep(250 * time.Millisecond)
 	}
 }

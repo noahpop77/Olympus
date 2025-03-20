@@ -4,91 +4,116 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/noahpop77/Olympus/game_server_service/game_server/gameServerProto"
 )
 
-func generateRandomMatchData(gameCreationUnixTime int64, match *gameServerProto.MatchCreation) *gameServerProto.MatchResult {
-	// Use a new random source for the generator
+func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUnixTime int64, TeamOnePUUIDStruct []string, TeamTwoPUUIDStruct []string, rng *rand.Rand) {
+    value, _ := activeMatches.Load(matchID)
+
+    var participants *gameServerProto.MatchResult
+    if value != nil {
+        participants = value.(*gameServerProto.MatchResult)
+    } else {
+		participants = &gameServerProto.MatchResult{}
+	}
+
+	randomDuration := rng.Intn(300) + 60
+
+	if participants.MatchID == "" {
+		participants.MatchID = matchID
+		participants.GameVersion = "14.21.630.3012"
+		participants.GameDuration = strconv.Itoa(randomDuration)
+		participants.GameStartTime = strconv.Itoa(int(gameEndUnixTime) - randomDuration)
+		participants.GameEndTime = strconv.Itoa(int(gameEndUnixTime))
+		participants.TeamOnePUUID = TeamOnePUUIDStruct
+		participants.TeamTwoPUUID = TeamTwoPUUIDStruct
+
+		activeMatches.Store(matchID, participants)
+		return
+	} else if participants.MatchID[:6] != "MATCH_" || len(participants.MatchID) < 7{
+		fmt.Printf("Has other data: %s\n", participants.MatchID)
+		return
+	} else {
+		return
+	}
+}
+
+func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap *sync.Map, matchDataMap *sync.Map) {
+
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	gameEndUnixTime := time.Now().Unix()
-
-	// Batch of 70 items per lobby
-	itemIDs := getRandomItems(70)
-
-	// Initiate protobuff based participants data model to populate
-	var participants []*gameServerProto.Participant
-
+	itemIDs := getRandomItems(7)
 	teamWin := (rng.Intn(2) == 0)
 	var TeamOnePUUIDStruct []string
 	var TeamTwoPUUIDStruct []string
-	
-	// Loops through all 10 players to create their participant info
-	for i := 0; i < 10; i++ {
-		champID, champName := getRandomChamp(rng)
 
-		if i < 6 {
+	for i := 0; i < 10; i++{
+		if i < 5 {
 			TeamOnePUUIDStruct = append(TeamOnePUUIDStruct, match.ParticipantsPUUID[i])
-			continue
 		} else {
 			TeamTwoPUUIDStruct = append(TeamTwoPUUIDStruct, match.ParticipantsPUUID[i])
 			teamWin = !teamWin
 		}
+	}
 
-		participants = append(participants, &gameServerProto.Participant{
-			Assists:                       int32(rng.Intn(25)),
-			ChampExperience:               int32(rng.Intn(12576)),
-			ChampLevel:                    int32(rng.Intn(18) + 1),
-			ChampionId:                    int32(champID), // Random champion id
-			ChampionName:                  champName,
-			Deaths:                        int32(rng.Intn(25)),
-			GoldEarned:                    int32(rng.Intn(25000)),
-			Item0:                         itemIDs[len(itemIDs)-7],
-			Item1:                         itemIDs[len(itemIDs)-6],
-			Item2:                         itemIDs[len(itemIDs)-5],
-			Item3:                         itemIDs[len(itemIDs)-4],
-			Item4:                         itemIDs[len(itemIDs)-3],
-			Item5:                         itemIDs[len(itemIDs)-2],
-			Item6:                         itemIDs[len(itemIDs)-1],
-			Kills:                         int32(rng.Intn(25)),
-			NeutralMinionsKilled:          int32(rng.Intn(100)),
-			Perks:                         &gameServerProto.Perks{ // Using a pointer here
-				Styles: []*gameServerProto.Style{
-					{Selections: []*gameServerProto.Selection{
-						{Perk: "9923"},
-					}},
-				},
+	generateRandomMatchData(match.MatchID, matchDataMap, gameEndUnixTime,TeamOnePUUIDStruct, TeamTwoPUUIDStruct, rng)
+
+	champID, champName := getRandomChamp(rng)
+
+	addParticipant(match.MatchID, matchParticipantsMap, &gameServerProto.Participant{
+		Assists:                       int32(rng.Intn(25)),
+		ChampExperience:               int32(rng.Intn(12576)),
+		ChampLevel:                    int32(rng.Intn(18) + 1),
+		ChampionId:                    int32(champID), // Random champion id
+		ChampionName:                  champName,
+		Deaths:                        int32(rng.Intn(25)),
+		GoldEarned:                    int32(rng.Intn(25000)),
+		Item0:                         itemIDs[0],
+		Item1:                         itemIDs[1],
+		Item2:                         itemIDs[2],
+		Item3:                         itemIDs[3],
+		Item4:                         itemIDs[4],
+		Item5:                         itemIDs[5],
+		Item6:                         itemIDs[6],
+		Kills:                         int32(rng.Intn(25)),
+		NeutralMinionsKilled:          int32(rng.Intn(100)),
+		Perks:                         &gameServerProto.Perks{
+			Styles: []*gameServerProto.Style{
+				{Selections: []*gameServerProto.Selection{
+					{Perk: "9923"},
+				}},
 			},
-			RiotIdGameName:                fmt.Sprintf("RiotGameName%d", rng.Intn(100)),
-			RiotIdTagline:                 "test",
-			Summoner1Id:                   "12",
-			Summoner2Id:                   "1",
-			SummonerName:                  fmt.Sprintf("Xx%sLover%dxX", champName, rng.Intn(99999)),
-			TeamId:                        int32(rng.Intn(2) * 100), // Team 100 or 200
-			TotalAllyJungleMinionsKilled:  int32(rng.Intn(100)),
-			TotalDamageDealtToChampions:   int32(rng.Intn(90000)),
-			TotalEnemyJungleMinionsKilled: int32(rng.Intn(20)),
-			TotalMinionsKilled:            int32(rng.Intn(200)),
-			VisionScore:                   int32(rng.Intn(50)),
-			Win:                           teamWin,
-		})
-		if len(itemIDs) > 7 {
-			itemIDs = itemIDs[:len(itemIDs)-7]
-		}
-	}
+		},
+		RiotIdGameName:                fmt.Sprintf("RiotGameName%d", rng.Intn(100)),
+		RiotIdTagline:                 RandomString(rng, 3),
+		Summoner1Id:                   "12",
+		Summoner2Id:                   "1",
+		SummonerName:                  fmt.Sprintf("Xx%sLover%dxX", champName, rng.Intn(99999)),
+		TeamId:                        int32(rng.Intn(2) * 100), // Team 100 or 200
+		TotalAllyJungleMinionsKilled:  int32(rng.Intn(100)),
+		TotalDamageDealtToChampions:   int32(rng.Intn(90000)),
+		TotalEnemyJungleMinionsKilled: int32(rng.Intn(20)),
+		TotalMinionsKilled:            int32(rng.Intn(200)),
+		VisionScore:                   int32(rng.Intn(50)),
+		Win:                           teamWin,
+	})
 
-	// Return the generated match data
-	return &gameServerProto.MatchResult{
-		MatchID: fmt.Sprintf("MATCH_%d", rng.Intn(9999999999)),
-		GameVersion: "14.21.630.3012",
-		GameDuration: strconv.Itoa(int(gameEndUnixTime - gameCreationUnixTime)),
-		GameStartTime: strconv.Itoa(int(gameCreationUnixTime)),
-		GameEndTime: strconv.Itoa(int(gameEndUnixTime)),
-		TeamOnePUUID: TeamOnePUUIDStruct,
-		TeamTwoPUUID: TeamTwoPUUIDStruct,
-		Participants: participants,
-	}
+}
+
+
+func addParticipant(matchID string, matchParticipantsMap *sync.Map, participant *gameServerProto.Participant) {
+    value, _ := matchParticipantsMap.Load(matchID)
+
+    var participants []*gameServerProto.Participant
+    if value != nil {
+        participants = value.([]*gameServerProto.Participant)
+    }
+
+    participants = append(participants, participant)
+    matchParticipantsMap.Store(matchID, participants)
 }
 
 // Based off of the letters string we can generate random strings based off a provided
