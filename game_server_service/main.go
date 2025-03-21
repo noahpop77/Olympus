@@ -90,7 +90,7 @@ func main() {
 	// Spawns match in managed sync map to avoid collisions
 	http.HandleFunc("/spawnMatch", instrumentedHandler("/addMatch", func(w http.ResponseWriter, r *http.Request) {
 
-		unpackedRequest, err := gameServer.UnpackCreationRequest(w,r)
+		unpackedRequest, err := gameServer.UnpackCreationRequest(w, r)
 		if err != nil {
 			http.Error(w, "Could not unpack the payload", http.StatusBadRequest)
 			return
@@ -105,7 +105,7 @@ func main() {
 		activeConnections.Inc()
 		defer activeConnections.Dec()
 
-		unpackedRequest, err := gameServer.UnpackConnectionRequest(w,r)
+		unpackedRequest, err := gameServer.UnpackConnectionRequest(w, r)
 		if err != nil {
 			http.Error(w, "Could not unpack the payload", http.StatusBadRequest)
 			return
@@ -119,7 +119,7 @@ func main() {
 				fmt.Println("Error: Type assertion failed")
 				return
 			}
-			
+
 			// Loops through match PUUIDs in requested match ID to find out if you are in it
 			for _, value := range match.ParticipantsPUUID {
 				if value == unpackedRequest.ParticipantPUUID {
@@ -137,7 +137,7 @@ func main() {
 					// w.Write(randomMatchData)
 
 					// Send a request to a database containing the results of the match
-					// 
+					//
 
 					// TODO: I NEED TO SEND THE REQUESTS TO THE DATABASE IN BATCHES
 					// OF 10 SO THAT WHEN ONE LOBBY FINISHES, THE MATCH HISTORY FOR

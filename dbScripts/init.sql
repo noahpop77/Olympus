@@ -1,5 +1,11 @@
+-- Create database if it doesn't exist
+SELECT 'CREATE DATABASE "olympus"'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'olympus')\gexec
+
+\connect olympus
+
 -- Create matchHistory table
-CREATE TABLE "matchHistory" (
+CREATE TABLE IF NOT EXISTS "matchHistory" (
     "matchID"               VARCHAR(50) NOT NULL,
     "gameVer"               VARCHAR(50) NOT NULL,
     "riotID"                VARCHAR(100) NOT NULL,
@@ -19,4 +25,6 @@ BEGIN
         CREATE USER sawa WITH PASSWORD 'sawa';
     END IF;
 END $$;
-GRANT ALL PRIVILEGES ON DATABASE "matchHistory" TO sawa;
+
+GRANT ALL PRIVILEGES ON DATABASE "olympus" TO sawa;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO sawa;

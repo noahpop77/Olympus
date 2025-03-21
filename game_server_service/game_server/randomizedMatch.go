@@ -11,14 +11,14 @@ import (
 )
 
 /*
-	Sets the shared match data in the sync.map for the given match for all 10 participants
+Sets the shared match data in the sync.map for the given match for all 10 participants
 */
 func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUnixTime int64, TeamOnePUUIDStruct []string, TeamTwoPUUIDStruct []string, rng *rand.Rand) {
-    var participants *gameServerProto.MatchResult
-    value, _ := activeMatches.Load(matchID)
-    if value != nil {
-        participants = value.(*gameServerProto.MatchResult)
-    } else {
+	var participants *gameServerProto.MatchResult
+	value, _ := activeMatches.Load(matchID)
+	if value != nil {
+		participants = value.(*gameServerProto.MatchResult)
+	} else {
 		participants = &gameServerProto.MatchResult{}
 	}
 
@@ -35,7 +35,7 @@ func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUni
 
 		activeMatches.Store(matchID, participants)
 		return
-	} else if participants.MatchID[:6] != "MATCH_" || len(participants.MatchID) < 7{
+	} else if participants.MatchID[:6] != "MATCH_" || len(participants.MatchID) < 7 {
 		fmt.Printf("Has other data: %s\n", participants.MatchID)
 		return
 	} else {
@@ -44,8 +44,8 @@ func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUni
 }
 
 /*
-	Generates gameData for the match. This includes creating the player specific participant
-	data as well as the match data section if it has not already been made
+Generates gameData for the match. This includes creating the player specific participant
+data as well as the match data section if it has not already been made
 */
 func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap *sync.Map, matchDataMap *sync.Map) {
 
@@ -68,31 +68,31 @@ func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap
 	}
 
 	// Match data
-	generateRandomMatchData(match.MatchID, matchDataMap, gameEndUnixTime,TeamOnePUUIDStruct, TeamTwoPUUIDStruct, rng)
+	generateRandomMatchData(match.MatchID, matchDataMap, gameEndUnixTime, TeamOnePUUIDStruct, TeamTwoPUUIDStruct, rng)
 
 	// Gets a random champion name and ID for use in the following participant strucuture
 	champID, champName := getRandomChamp(rng)
 
-	// Participant structure that will house the randomized data and passes it to 
+	// Participant structure that will house the randomized data and passes it to
 	// the addParticipant function to append to the participant sync map
 	addParticipant(match.MatchID, matchParticipantsMap, &gameServerProto.Participant{
-		Assists:                       int32(rng.Intn(25)),
-		ChampExperience:               int32(rng.Intn(12576)),
-		ChampLevel:                    int32(rng.Intn(18) + 1),
-		ChampionId:                    int32(champID), // Random champion id
-		ChampionName:                  champName,
-		Deaths:                        int32(rng.Intn(25)),
-		GoldEarned:                    int32(rng.Intn(25000)),
-		Item0:                         itemIDs[0],
-		Item1:                         itemIDs[1],
-		Item2:                         itemIDs[2],
-		Item3:                         itemIDs[3],
-		Item4:                         itemIDs[4],
-		Item5:                         itemIDs[5],
-		Item6:                         itemIDs[6],
-		Kills:                         int32(rng.Intn(25)),
-		NeutralMinionsKilled:          int32(rng.Intn(100)),
-		Perks:                         &gameServerProto.Perks{
+		Assists:              int32(rng.Intn(25)),
+		ChampExperience:      int32(rng.Intn(12576)),
+		ChampLevel:           int32(rng.Intn(18) + 1),
+		ChampionId:           int32(champID), // Random champion id
+		ChampionName:         champName,
+		Deaths:               int32(rng.Intn(25)),
+		GoldEarned:           int32(rng.Intn(25000)),
+		Item0:                itemIDs[0],
+		Item1:                itemIDs[1],
+		Item2:                itemIDs[2],
+		Item3:                itemIDs[3],
+		Item4:                itemIDs[4],
+		Item5:                itemIDs[5],
+		Item6:                itemIDs[6],
+		Kills:                int32(rng.Intn(25)),
+		NeutralMinionsKilled: int32(rng.Intn(100)),
+		Perks: &gameServerProto.Perks{
 			Styles: []*gameServerProto.Style{
 				{Selections: []*gameServerProto.Selection{
 					{Perk: "9923"},
@@ -115,21 +115,21 @@ func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap
 
 }
 
-// Helper function that akes in a matchID used for a key in the sync.map, 
+// Helper function that akes in a matchID used for a key in the sync.map,
 // a participant sync.map, and a participant with their randomized data
 func addParticipant(matchID string, matchParticipantsMap *sync.Map, participant *gameServerProto.Participant) {
-    value, _ := matchParticipantsMap.Load(matchID)
+	value, _ := matchParticipantsMap.Load(matchID)
 
-    var participants []*gameServerProto.Participant
-    if value != nil {
-        participants = value.([]*gameServerProto.Participant)
-    }
+	var participants []*gameServerProto.Participant
+	if value != nil {
+		participants = value.([]*gameServerProto.Participant)
+	}
 
-    participants = append(participants, participant)
-    matchParticipantsMap.Store(matchID, participants)
+	participants = append(participants, participant)
+	matchParticipantsMap.Store(matchID, participants)
 }
 
-// Based off of the letters string we can generate random strings 
+// Based off of the letters string we can generate random strings
 // based off a provided length and the characters provided
 func RandomString(rng *rand.Rand, length int) string {
 	const letters = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -143,175 +143,175 @@ func RandomString(rng *rand.Rand, length int) string {
 // Self explanitory
 func getRandomChamp(rng *rand.Rand) (int, string) {
 	champions := map[string]string{
-		"Aatrox":      "266",
-		"Ahri":        "103",
-		"Akali":       "84",
-		"Akshan":      "166",
-		"Alistar":     "12",
-		"Ambessa":     "799",
-		"Amumu":       "32",
-		"Anivia":      "34",
-		"Annie":       "1",
-		"Aphelios":    "523",
-		"Ashe":        "22",
-		"AurelionSol": "136",
-		"Aurora":      "893",
-		"Azir":        "268",
-		"Bard":        "432",
-		"Belveth":     "200",
-		"Blitzcrank":  "53",
-		"Brand":       "63",
-		"Braum":       "201",
-		"Briar":       "233",
-		"Caitlyn":     "51",
-		"Camille":     "164",
-		"Cassiopeia":  "69",
-		"Chogath":     "31",
-		"Corki":       "42",
-		"Darius":      "122",
-		"Diana":       "131",
-		"Draven":      "119",
-		"DrMundo":     "36",
-		"Ekko":        "245",
-		"Elise":       "60",
-		"Evelynn":     "28",
-		"Ezreal":      "81",
-		"Fiddlesticks":"9",
-		"Fiora":       "114",
-		"Fizz":        "105",
-		"Galio":       "3",
-		"Gangplank":   "41",
-		"Garen":       "86",
-		"Gnar":        "150",
-		"Gragas":      "79",
-		"Graves":      "104",
-		"Gwen":        "887",
-		"Hecarim":     "120",
-		"Heimerdinger":"74",
-		"Hwei":        "910",
-		"Illaoi":      "420",
-		"Irelia":      "39",
-		"Ivern":       "427",
-		"Janna":       "40",
-		"JarvanIV":    "59",
-		"Jax":         "24",
-		"Jayce":       "126",
-		"Jhin":        "202",
-		"Jinx":        "222",
-		"Kaisa":       "145",
-		"Kalista":     "429",
-		"Karma":       "43",
-		"Karthus":     "30",
-		"Kassadin":    "38",
-		"Katarina":    "55",
-		"Kayle":       "10",
-		"Kayn":        "141",
-		"Kennen":      "85",
-		"Khazix":      "121",
-		"Kindred":     "203",
-		"Kled":        "240",
-		"KogMaw":      "96",
-		"KSante":      "897",
-		"Leblanc":     "7",
-		"LeeSin":      "64",
-		"Leona":       "89",
-		"Lillia":      "876",
-		"Lissandra":   "127",
-		"Lucian":      "236",
-		"Lulu":        "117",
-		"Lux":         "99",
-		"Malphite":    "54",
-		"Malzahar":    "90",
-		"Maokai":      "57",
-		"MasterYi":    "11",
-		"Milio":       "902",
-		"MissFortune": "21",
-		"MonkeyKing":  "62",
-		"Mordekaiser": "82",
-		"Morgana":     "25",
-		"Naafiri":     "950",
-		"Nami":        "267",
-		"Nasus":       "75",
-		"Nautilus":    "111",
-		"Neeko":       "518",
-		"Nidalee":     "76",
-		"Nilah":       "895",
-		"Nocturne":    "56",
-		"Nunu":        "20",
-		"Olaf":        "2",
-		"Orianna":     "61",
-		"Ornn":        "516",
-		"Pantheon":    "80",
-		"Poppy":       "78",
-		"Pyke":        "555",
+		"Aatrox":       "266",
+		"Ahri":         "103",
+		"Akali":        "84",
+		"Akshan":       "166",
+		"Alistar":      "12",
+		"Ambessa":      "799",
+		"Amumu":        "32",
+		"Anivia":       "34",
+		"Annie":        "1",
+		"Aphelios":     "523",
+		"Ashe":         "22",
+		"AurelionSol":  "136",
+		"Aurora":       "893",
+		"Azir":         "268",
+		"Bard":         "432",
+		"Belveth":      "200",
+		"Blitzcrank":   "53",
+		"Brand":        "63",
+		"Braum":        "201",
+		"Briar":        "233",
+		"Caitlyn":      "51",
+		"Camille":      "164",
+		"Cassiopeia":   "69",
+		"Chogath":      "31",
+		"Corki":        "42",
+		"Darius":       "122",
+		"Diana":        "131",
+		"Draven":       "119",
+		"DrMundo":      "36",
+		"Ekko":         "245",
+		"Elise":        "60",
+		"Evelynn":      "28",
+		"Ezreal":       "81",
+		"Fiddlesticks": "9",
+		"Fiora":        "114",
+		"Fizz":         "105",
+		"Galio":        "3",
+		"Gangplank":    "41",
+		"Garen":        "86",
+		"Gnar":         "150",
+		"Gragas":       "79",
+		"Graves":       "104",
+		"Gwen":         "887",
+		"Hecarim":      "120",
+		"Heimerdinger": "74",
+		"Hwei":         "910",
+		"Illaoi":       "420",
+		"Irelia":       "39",
+		"Ivern":        "427",
+		"Janna":        "40",
+		"JarvanIV":     "59",
+		"Jax":          "24",
+		"Jayce":        "126",
+		"Jhin":         "202",
+		"Jinx":         "222",
+		"Kaisa":        "145",
+		"Kalista":      "429",
+		"Karma":        "43",
+		"Karthus":      "30",
+		"Kassadin":     "38",
+		"Katarina":     "55",
+		"Kayle":        "10",
+		"Kayn":         "141",
+		"Kennen":       "85",
+		"Khazix":       "121",
+		"Kindred":      "203",
+		"Kled":         "240",
+		"KogMaw":       "96",
+		"KSante":       "897",
+		"Leblanc":      "7",
+		"LeeSin":       "64",
+		"Leona":        "89",
+		"Lillia":       "876",
+		"Lissandra":    "127",
+		"Lucian":       "236",
+		"Lulu":         "117",
+		"Lux":          "99",
+		"Malphite":     "54",
+		"Malzahar":     "90",
+		"Maokai":       "57",
+		"MasterYi":     "11",
+		"Milio":        "902",
+		"MissFortune":  "21",
+		"MonkeyKing":   "62",
+		"Mordekaiser":  "82",
+		"Morgana":      "25",
+		"Naafiri":      "950",
+		"Nami":         "267",
+		"Nasus":        "75",
+		"Nautilus":     "111",
+		"Neeko":        "518",
+		"Nidalee":      "76",
+		"Nilah":        "895",
+		"Nocturne":     "56",
+		"Nunu":         "20",
+		"Olaf":         "2",
+		"Orianna":      "61",
+		"Ornn":         "516",
+		"Pantheon":     "80",
+		"Poppy":        "78",
+		"Pyke":         "555",
 		"Qiyana":       "246",
-		"Quinn":       "133",
-		"Rakan":       "497",
-		"Rammus":      "33",
-		"RekSai":      "421",
-		"Rell":        "526",
-		"Renata":      "888",
-		"Renekton":    "58",
-		"Rengar":      "107",
-		"Riven":       "92",
-		"Rumble":      "68",
-		"Ryze":        "13",
-		"Samira":      "360",
-		"Sejuani":     "113",
-		"Senna":       "235",
-		"Seraphine":   "147",
-		"Sett":        "875",
-		"Shaco":       "35",
-		"Shen":        "98",
-		"Shyvana":     "102",
-		"Singed":      "27",
-		"Sion":        "14",
-		"Sivir":       "15",
-		"Skarner":     "72",
-		"Smolder":     "901",
-		"Sona":        "37",
-		"Soraka":      "16",
-		"Swain":       "50",
-		"Sylas":       "517",
-		"Syndra":      "134",
-		"TahmKench":   "223",
-		"Taliyah":     "163",
-		"Talon":       "91",
-		"Taric":       "44",
-		"Teemo":       "17",
-		"Thresh":      "412",
-		"Tristana":    "18",
+		"Quinn":        "133",
+		"Rakan":        "497",
+		"Rammus":       "33",
+		"RekSai":       "421",
+		"Rell":         "526",
+		"Renata":       "888",
+		"Renekton":     "58",
+		"Rengar":       "107",
+		"Riven":        "92",
+		"Rumble":       "68",
+		"Ryze":         "13",
+		"Samira":       "360",
+		"Sejuani":      "113",
+		"Senna":        "235",
+		"Seraphine":    "147",
+		"Sett":         "875",
+		"Shaco":        "35",
+		"Shen":         "98",
+		"Shyvana":      "102",
+		"Singed":       "27",
+		"Sion":         "14",
+		"Sivir":        "15",
+		"Skarner":      "72",
+		"Smolder":      "901",
+		"Sona":         "37",
+		"Soraka":       "16",
+		"Swain":        "50",
+		"Sylas":        "517",
+		"Syndra":       "134",
+		"TahmKench":    "223",
+		"Taliyah":      "163",
+		"Talon":        "91",
+		"Taric":        "44",
+		"Teemo":        "17",
+		"Thresh":       "412",
+		"Tristana":     "18",
 		"Trundle":      "48",
-		"Tryndamere":  "23",
-		"TwistedFate": "4",
-		"Twitch":      "29",
-		"Udyr":        "77",
-		"Urgot":       "6",
-		"Varus":       "110",
-		"Vayne":       "67",
-		"Veigar":      "45",
-		"Velkoz":      "161",
-		"Vex":         "711",
-		"Vi":          "254",
-		"Viego":       "234",
-		"Viktor":      "112",
-		"Vladimir":    "8",
-		"Volibear":    "106",
-		"Warwick":     "19",
-		"Xayah":       "498",
-		"Xerath":      "101",
-		"XinZhao":     "5",
-		"Yasuo":       "157",
-		"Yone":        "777",
-		"Yorick":      "83",
-		"Yuumi":       "350",
-		"Zac":         "154",
-		"Zed":         "238",
-		"Zeri":        "221",
-		"Ziggs":       "115",
-		"Zilean":      "26",
-		"Zoe":         "142",
-		"Zyra":        "143",
+		"Tryndamere":   "23",
+		"TwistedFate":  "4",
+		"Twitch":       "29",
+		"Udyr":         "77",
+		"Urgot":        "6",
+		"Varus":        "110",
+		"Vayne":        "67",
+		"Veigar":       "45",
+		"Velkoz":       "161",
+		"Vex":          "711",
+		"Vi":           "254",
+		"Viego":        "234",
+		"Viktor":       "112",
+		"Vladimir":     "8",
+		"Volibear":     "106",
+		"Warwick":      "19",
+		"Xayah":        "498",
+		"Xerath":       "101",
+		"XinZhao":      "5",
+		"Yasuo":        "157",
+		"Yone":         "777",
+		"Yorick":       "83",
+		"Yuumi":        "350",
+		"Zac":          "154",
+		"Zed":          "238",
+		"Zeri":         "221",
+		"Ziggs":        "115",
+		"Zilean":       "26",
+		"Zoe":          "142",
+		"Zyra":         "143",
 	}
 
 	// Pick a random champion from the list
@@ -352,7 +352,7 @@ func getRandomItems(numItemsNeeded int) []string {
 	return randomIDs
 }
 
-// Helper function used in getRandomItems to ensure unique items per match 
+// Helper function used in getRandomItems to ensure unique items per match
 func contains(slice []string, item string) bool {
 	for _, s := range slice {
 		if s == item {
