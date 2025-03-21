@@ -178,6 +178,9 @@ func main() {
 					teamTwoPUUID := randomMatch.TeamTwoPUUID
 					participants := participantJsonData
 
+					// TODO: Add a function that updates the users profile based off the results of the match
+					// updateProfile()
+
 					// Execute INSERT query
 					_, err = conn.Exec(context.Background(),
 						`INSERT INTO "matchHistory" 
