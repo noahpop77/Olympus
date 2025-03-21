@@ -79,8 +79,8 @@ func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap
 		Assists:              int32(rng.Intn(25)),
 		ChampExperience:      int32(rng.Intn(12576)),
 		ChampLevel:           int32(rng.Intn(18) + 1),
-		ChampionId:           int32(champID), // Random champion id
-		ChampionName:         champName,
+		ChampId:              int32(champID), // Random champion id
+		ChampName:            champName,
 		Deaths:               int32(rng.Intn(25)),
 		GoldEarned:           int32(rng.Intn(25000)),
 		Item0:                itemIDs[0],
@@ -93,16 +93,19 @@ func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap
 		Kills:                int32(rng.Intn(25)),
 		NeutralMinionsKilled: int32(rng.Intn(100)),
 		Perks: &gameServerProto.Perks{
-			Styles: []*gameServerProto.Style{
+			Styles: []*gameServerProto.Styles{
 				{Selections: []*gameServerProto.Selection{
 					{Perk: "9923"},
 				}},
+				{
+					Style: "9923",
+				},
 			},
 		},
-		RiotIdGameName:                fmt.Sprintf("RiotGameName%d", rng.Intn(100)),
-		RiotIdTagline:                 RandomString(rng, 3),
-		Summoner1Id:                   "12",
-		Summoner2Id:                   "1",
+		RiotName:                      fmt.Sprintf("RiotGameName%d", rng.Intn(100)),
+		RiotTag:                       RandomString(rng, 3),
+		Summoner1:                     "12",
+		Summoner2:                     "1",
 		SummonerName:                  fmt.Sprintf("Xx%sLover%dxX", champName, rng.Intn(99999)),
 		TeamId:                        int32(rng.Intn(2) * 100), // Team 100 or 200
 		TotalAllyJungleMinionsKilled:  int32(rng.Intn(100)),

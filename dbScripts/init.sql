@@ -18,6 +18,17 @@ CREATE TABLE IF NOT EXISTS "matchHistory" (
     CONSTRAINT unique_pair_index UNIQUE ("matchID", "riotID")
 );
 
+-- Create summonerRankedInfo table
+CREATE TABLE IF NOT EXISTS "summonerRankedInfo" (
+    "puuid"         VARCHAR(100) NOT NULL,
+    "riotName"      VARCHAR(45) NOT NULL,
+    "riotTag"       VARCHAR(45) NOT NULL,
+    "rank"          VARCHAR(45) NOT NULL,
+    "wins"          VARCHAR(45) NOT NULL,
+    "losses"        VARCHAR(45) NOT NULL,
+    PRIMARY KEY ("puuid")
+);
+
 -- Create user and grant privileges
 DO $$
 BEGIN

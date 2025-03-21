@@ -35,22 +35,23 @@ message Selection {
     string perk = 1;
 }
 
-message Style {
+message Styles {
     repeated Selection selections = 1;
+    string style = 2;
 }
 
 message Perks {
-    repeated Style styles = 1;
+    repeated Styles styles = 1;
 }
 
 message Participant {
     int32 assists = 1;
-    int32 champ_experience = 2;
-    int32 champ_level = 3;
-    int32 champion_id = 4;
-    string champion_name = 5;
+    int32 champExperience = 2;
+    int32 champLevel = 3;
+    int32 champId = 4;
+    string champName = 5;
     int32 deaths = 6;
-    int32 gold_earned = 7;
+    int32 goldEarned = 7;
     string item0 = 8;
     string item1 = 9;
     string item2 = 10;
@@ -59,18 +60,18 @@ message Participant {
     string item5 = 13;
     string item6 = 14;
     int32 kills = 15;
-    int32 neutral_minions_killed = 16;
+    int32 neutralMinionsKilled = 16;
     Perks perks = 17;
-    string riot_id_game_name = 18;
-    string riot_id_tagline = 19;
-    string summoner1_id = 20;
-    string summoner2_id = 21;
-    string summoner_name = 22;
-    int32 team_id = 23;
-    int32 total_ally_jungle_minions_killed = 24;
-    int32 total_damage_dealt_to_champions = 25;
-    int32 total_enemy_jungle_minions_killed = 26;
-    int32 total_minions_killed = 27;
-    int32 vision_score = 28;
+    string riotName = 18;
+    string riotTag = 19;
+    string summoner1 = 20;
+    string summoner2 = 21;
+    string summonerName = 22;
+    int32 teamId = 23;
+    int32 totalAllyJungleMinionsKilled = 24;
+    int32 totalDamageDealtToChampions = 25;
+    int32 totalEnemyJungleMinionsKilled = 26;
+    int32 totalMinionsKilled = 27;
+    int32 visionScore = 28;
     bool win = 29;
 }
