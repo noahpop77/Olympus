@@ -13,6 +13,12 @@ message MatchCreation {
 message MatchConnection {
     string matchID = 1;
     string participantPUUID = 2;
+    string riotName = 3;
+    string riotTag = 4;
+    string rank = 5;
+    string role = 6;
+    string partyId = 7;
+    string queueType = 8;
 }
 
 message MatchResult {

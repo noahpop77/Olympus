@@ -9,9 +9,9 @@ CREATE TABLE IF NOT EXISTS "matchHistory" (
     "matchID"               VARCHAR(50) NOT NULL,
     "gameVer"               VARCHAR(50) NOT NULL,
     "riotID"                VARCHAR(100) NOT NULL,
-    "gameDuration"          VARCHAR(20) NOT NULL,
-    "gameCreationTimestamp" VARCHAR(20) NOT NULL,
-    "gameEndTimestamp"      VARCHAR(20) NOT NULL,
+    "gameDuration"          INT NOT NULL,
+    "gameCreationTimestamp" INT NOT NULL,
+    "gameEndTimestamp"      INT NOT NULL,
     "teamOnePUUID"          TEXT[] NOT NULL,
     "teamTwoPUUID"          TEXT[] NOT NULL,
     "participants"          JSON NOT NULL,
@@ -23,9 +23,9 @@ CREATE TABLE IF NOT EXISTS "summonerRankedInfo" (
     "puuid"         VARCHAR(100) NOT NULL,
     "riotName"      VARCHAR(45) NOT NULL,
     "riotTag"       VARCHAR(45) NOT NULL,
-    "rank"          VARCHAR(45) NOT NULL,
-    "wins"          VARCHAR(45) NOT NULL,
-    "losses"        VARCHAR(45) NOT NULL,
+    "rank"          INT NOT NULL,
+    "wins"          INT NOT NULL,
+    "losses"        INT NOT NULL,
     PRIMARY KEY ("puuid")
 );
 
@@ -38,4 +38,4 @@ BEGIN
 END $$;
 
 GRANT ALL PRIVILEGES ON DATABASE "olympus" TO sawa;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO sawa;
+GRANT ALL ON SCHEMA public TO sawa;

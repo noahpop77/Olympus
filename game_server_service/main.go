@@ -123,7 +123,7 @@ func main() {
 			// Loops through match PUUIDs in requested match ID to find out if you are in it
 			for _, value := range match.ParticipantsPUUID {
 				if value == unpackedRequest.ParticipantPUUID {
-					err := gameServer.ConnectPlayerToMatch(&activeMatches, &matchDataMap, match, &matchParticipantsMap)
+					err := gameServer.ConnectPlayerToMatch(&activeMatches, &matchDataMap, match, &matchParticipantsMap, unpackedRequest)
 					if err != nil {
 						http.Error(w, "Failed to connect player to match", http.StatusInternalServerError)
 						return
@@ -179,8 +179,8 @@ func main() {
 					participants := participantJsonData
 
 					// TODO: Add a function that updates the users profile based off the results of the match
-					// updateProfile()
-
+					gameServer.UpdateProfile(conn, unpackedRequest.ParticipantPUUID, unpackedRequest.RiotName, unpackedRequest.RiotTag, randomMatch)
+					
 					// Execute INSERT query
 					_, err = conn.Exec(context.Background(),
 						`INSERT INTO "matchHistory" 

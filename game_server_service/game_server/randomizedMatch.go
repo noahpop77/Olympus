@@ -22,6 +22,14 @@ func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUni
 		participants = &gameServerProto.MatchResult{}
 	}
 
+	var winners string
+	if rng.Intn(2) == 1 {
+		winners = "one"
+	} else {
+		winners = "two"
+	}
+
+
 	randomDuration := rng.Intn(300) + 60
 
 	if participants.MatchID == "" {
@@ -32,6 +40,7 @@ func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUni
 		participants.GameEndTime = strconv.Itoa(int(gameEndUnixTime))
 		participants.TeamOnePUUID = TeamOnePUUIDStruct
 		participants.TeamTwoPUUID = TeamTwoPUUIDStruct
+		participants.Winners = winners
 
 		activeMatches.Store(matchID, participants)
 		return
@@ -47,7 +56,7 @@ func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUni
 Generates gameData for the match. This includes creating the player specific participant
 data as well as the match data section if it has not already been made
 */
-func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap *sync.Map, matchDataMap *sync.Map) {
+func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap *sync.Map, matchDataMap *sync.Map, unpackedRequest *gameServerProto.MatchConnection) {
 
 	// Building blocks for data fields
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -102,8 +111,10 @@ func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap
 				},
 			},
 		},
-		RiotName:                      fmt.Sprintf("RiotGameName%d", rng.Intn(100)),
-		RiotTag:                       RandomString(rng, 3),
+		RiotName:                      unpackedRequest.RiotName,
+		RiotTag:                       unpackedRequest.RiotTag,
+		// RiotName:                      fmt.Sprintf("RiotName_%s", RandomString(rng, 6)),
+		// RiotTag:                       RandomString(rng, 3),
 		Summoner1:                     "12",
 		Summoner2:                     "1",
 		SummonerName:                  fmt.Sprintf("Xx%sLover%dxX", champName, rng.Intn(99999)),
@@ -113,7 +124,6 @@ func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap
 		TotalEnemyJungleMinionsKilled: int32(rng.Intn(20)),
 		TotalMinionsKilled:            int32(rng.Intn(200)),
 		VisionScore:                   int32(rng.Intn(50)),
-		Win:                           teamWin,
 	})
 
 }
