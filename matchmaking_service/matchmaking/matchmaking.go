@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/noahpop77/Olympus/matchmaking_service/matchmaking/matchmakingProto"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
@@ -30,7 +31,7 @@ type matchedParty struct {
 	PlayerRank      string
 }
 
-// WithinRankRange checks if the rank difference is within ±3.
+// WithinRankRange checks if the rank difference is within a specified range
 func WithinRankRange(myRank, teamRank int) bool {
 	diff := myRank - teamRank
 	return diff < 4 && diff > -4
@@ -84,7 +85,7 @@ func UnpackedRequestValidation(unpackedRequest *matchmakingProto.Players) bool {
 }
 
 // AddPartyToRedis handles party creation and Redis caching for the matchmaking request.
-func AddPartyToRedis(w http.ResponseWriter, unpackedRequest *matchmakingProto.Players, rdb *redis.Client, ctx context.Context) {
+func AddPartyToRedis(w http.ResponseWriter, unpackedRequest *matchmakingProto.Players, myRank int, rdb *redis.Client, ctx context.Context) {
 	
 	err := rdb.HSet(ctx, unpackedRequest.PartyId,
 		"PartyId", unpackedRequest.PartyId,
@@ -92,7 +93,7 @@ func AddPartyToRedis(w http.ResponseWriter, unpackedRequest *matchmakingProto.Pl
 		"PlayerPuuid", unpackedRequest.PlayerPuuid,
 		"PlayerRiotName", unpackedRequest.PlayerRiotName,
 		"PlayerRiotTagLine", unpackedRequest.PlayerRiotTagLine,
-		"PlayerRank", unpackedRequest.PlayerRank,
+		"PlayerRank", myRank,
 		"PlayerRole", unpackedRequest.PlayerRole).Err()
 
 	if err != nil {
@@ -146,10 +147,23 @@ func ProcessParty(ctx context.Context, rdb *redis.Client, unpackedRequest *match
 		return nil
 	}
 
-	teammateRank, err := strconv.Atoi(tempRank)
+	teammateRank, _ := strconv.Atoi(tempRank)
+	myRank := int(unpackedRequest.PlayerRank)
+	//////////////////////////////////////////
+	// var myRank int
+	// err = conn.QueryRow(context.Background(),
+	// 	`SELECT rank FROM "summonerRankedInfo" WHERE puuid = $1`, unpackedRequest.PlayerPuuid).
+	// 	Scan(&myRank)
+	// if err == pgx.ErrNoRows{
+	// 	myRank = int(unpackedRequest.PlayerRank)
+	// } else if err != nil && err != pgx.ErrNoRows {
+	// 	log.Fatal("Failed to fetch summoner rank info:", err)
+	// }
+	//////////////////////////////////////////
 
 	// Check rank constraints.
-	if WithinRankRange(int(unpackedRequest.PlayerRank), teammateRank) {
+	// log.Printf("%d - %d", myRank, teammateRank)
+	if WithinRankRange(myRank, teammateRank) {
 		hashData, err := rdb.HGetAll(ctx, key).Result()
 		if err != nil {
 			log.Printf("failed to get hash data for key %s: %v", key, err)
@@ -165,10 +179,17 @@ func ProcessParty(ctx context.Context, rdb *redis.Client, unpackedRequest *match
 			Puuid:           hashData["PlayerPuuid"],
 			PlayerRank:      hashData["PlayerRank"],
 		})
+		// for _, value := range hashData{
+		// 	log.Printf("%s", value)
+		// }
 		return nil
 	}
 
-	return err
+	if err == pgx.ErrNoRows{
+		return nil
+	} else {
+		return err
+	}
 }
 
 // MatchmakingSelection concurrently processes all parties to build a matched team.
@@ -178,6 +199,13 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *matchmakingPro
 	var matchedParties []matchedParty
 	mu.Lock()
 	defer mu.Unlock()
+
+	// dsn := "postgres://sawa:sawa@postgres:5432/olympus"
+	// conn, err := pgx.Connect(context.Background(), dsn)
+	// if err != nil {
+	// 	log.Fatalf("Unable to connect to database: %v\n", err)
+	// }
+	// defer conn.Close(context.Background())
 
 	// Steps through the db 100 keys at a time. Full Scans locks DB.
 	var newCursor uint64
@@ -193,6 +221,7 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *matchmakingPro
 				break
 			}
 			err := ProcessParty(ctx, rdb, unpackedRequest, key, &matchedParties)
+			// err := ProcessParty(ctx, rdb, unpackedRequest, key, &matchedParties, conn)
 			if err == redis.Nil {
 				continue
 			} else if err != nil {

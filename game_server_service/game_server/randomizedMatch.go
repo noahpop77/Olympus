@@ -10,6 +10,8 @@ import (
 	"github.com/noahpop77/Olympus/game_server_service/game_server/gameServerProto"
 )
 
+// TODO: Consider writing unit tests for generateGameData, generateRandomMatchData, and addParticipant. Testing the logic around generating random data will ensure that edge cases like empty or invalid inputs are handled properly, and that the sync.Map interactions behave as expected under concurrency.
+
 /*
 Sets the shared match data in the sync.map for the given match for all 10 participants
 */

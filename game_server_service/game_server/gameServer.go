@@ -65,52 +65,44 @@ func UnpackConnectionRequest(w http.ResponseWriter, r *http.Request) (*gameServe
 	return &unpackedRequest, nil
 }
 
-func UpdateProfile(conn *pgx.Conn, puuid string, riotName string, riotTag string, randomMatch *gameServerProto.MatchResult) {
-
-	// TODO: VALIDATE THAT THE RANK, WIN, AND LOSS INCREMENT/DECREMENT IS
-	// WORKING PROPERLY IN THE summonerRankedInfo TABLE
-
-	// TODO: USE PASSED IN OR DATABASE VALIDATED RANK RATHER THAN THE
-	// DEFAULT ONE
-
+func UpdateProfile(conn *pgx.Conn, unpackedRequest *gameServerProto.MatchConnection, randomMatch *gameServerProto.MatchResult) {
+	
 	var myTeam string
 	for _, value := range randomMatch.TeamOnePUUID{
-		if value == puuid {
+		if value == unpackedRequest.ParticipantPUUID {
 			myTeam = "one"
 		}
 	}
 	if myTeam != "one" {
 		for _, value := range randomMatch.TeamTwoPUUID{
-			if value == puuid {
+			if value == unpackedRequest.ParticipantPUUID {
 				myTeam = "two"
 			}
 		}
-	}	
+	}
+
+	unpackedRank, _ := strconv.Atoi(unpackedRequest.Rank)
 
 	var rank, wins, losses int
 	err := conn.QueryRow(context.Background(),
-		`SELECT rank, wins, losses FROM "summonerRankedInfo" WHERE puuid = $1`, puuid).
+		`SELECT rank, wins, losses FROM "summonerRankedInfo" WHERE puuid = $1`, unpackedRequest.ParticipantPUUID).
 		Scan(&rank, &wins, &losses)
-	log.Printf("err: %v: %d, %d, %d, %s",err, rank, wins, losses, puuid)
 	if err == pgx.ErrNoRows{
 		// defaults: rank=22 wins=0, losses=0
-		if myTeam == randomMatch.Winners {
-			rank = 23
-			wins = 1
-			losses = 0
-		} else {
-			rank = 21
-			wins = 0
-			losses = 1
-		}
-
+		rank = unpackedRank
+		wins = 0
+		losses = 0
 	} else if err != nil && err != pgx.ErrNoRows {
 		log.Fatal("Failed to fetch summoner rank info:", err)
 	}
 
 	if myTeam == randomMatch.Winners {
-		rank++
-		wins++
+		if rank == 44 {
+			wins++
+		} else {
+			rank++
+			wins++
+		}
 	} else {
 		if rank > 0 {
 			rank--
@@ -118,19 +110,16 @@ func UpdateProfile(conn *pgx.Conn, puuid string, riotName string, riotTag string
 		losses++
 	}
 
-
 	_, err = conn.Exec(context.Background(),
 		`INSERT INTO "summonerRankedInfo" 
 		("puuid", "riotName", "riotTag", "rank", "wins", "losses") 
 		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (puuid) 
 		DO UPDATE
-		SET "riotName" = EXCLUDED."riotName", 
-        "riotTag" = EXCLUDED."riotTag", 
-        "rank" = EXCLUDED."rank", 
+		SET "rank" = EXCLUDED."rank", 
         "wins" = EXCLUDED."wins", 
         "losses" = EXCLUDED."losses";`,
-		puuid, riotName, riotTag, rank, wins, losses)
+		unpackedRequest.ParticipantPUUID, unpackedRequest.RiotName, unpackedRequest.RiotTag, rank, wins, losses)
 	
 		if err != nil {
 			log.Fatalf("Insert failed: %v\n", err)
@@ -173,14 +162,14 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 				if len(randomParticipants) != 10 {
 					continue
 				} else {
-					value, _ := matchDataMap.Load(match.MatchID)
-					var matchData *gameServerProto.MatchResult
-					if value != nil {
-						matchData = value.(*gameServerProto.MatchResult)
-					}
+					// value, _ := matchDataMap.Load(match.MatchID)
+					// var matchData *gameServerProto.MatchResult
+					// if value != nil {
+					// 	matchData = value.(*gameServerProto.MatchResult)
+					// }
 					
-					gameDuration, _ := strconv.Atoi(matchData.GameDuration)
-					// gameDuration := 1
+					// gameDuration, _ := strconv.Atoi(matchData.GameDuration)
+					gameDuration := 1
 					time.Sleep(time.Duration(gameDuration) * time.Second)
 					break
 				}

@@ -83,6 +83,7 @@ func main() {
 	var activeMatches sync.Map
 	var matchDataMap sync.Map
 	var matchParticipantsMap sync.Map
+	var databaseTransactionMutex sync.Mutex
 
 	// Endpoint used to expose prometheus metrics
 	http.Handle("/metrics", promhttp.Handler())
@@ -123,25 +124,12 @@ func main() {
 			// Loops through match PUUIDs in requested match ID to find out if you are in it
 			for _, value := range match.ParticipantsPUUID {
 				if value == unpackedRequest.ParticipantPUUID {
+					
 					err := gameServer.ConnectPlayerToMatch(&activeMatches, &matchDataMap, match, &matchParticipantsMap, unpackedRequest)
 					if err != nil {
 						http.Error(w, "Failed to connect player to match", http.StatusInternalServerError)
 						return
 					}
-
-					// randomMatchData, err := proto.Marshal(randomMatch)
-					// if err != nil {
-					// 	return
-					// }
-					// w.Header().Set("Content-Type", "application/x-protobuf")
-					// w.Write(randomMatchData)
-
-					// Send a request to a database containing the results of the match
-					//
-
-					// TODO: I NEED TO SEND THE REQUESTS TO THE DATABASE IN BATCHES
-					// OF 10 SO THAT WHEN ONE LOBBY FINISHES, THE MATCH HISTORY FOR
-					// ALL OF THE PLAYERS IN THAT GAME IS UPDATED AT ONCE
 
 					dsn := "postgres://sawa:sawa@postgres:5432/olympus"
 					conn, err := pgx.Connect(context.Background(), dsn)
@@ -178,8 +166,10 @@ func main() {
 					teamTwoPUUID := randomMatch.TeamTwoPUUID
 					participants := participantJsonData
 
-					// TODO: Add a function that updates the users profile based off the results of the match
-					gameServer.UpdateProfile(conn, unpackedRequest.ParticipantPUUID, unpackedRequest.RiotName, unpackedRequest.RiotTag, randomMatch)
+					
+					databaseTransactionMutex.Lock()
+					gameServer.UpdateProfile(conn, unpackedRequest, randomMatch)
+					databaseTransactionMutex.Unlock()
 					
 					// Execute INSERT query
 					_, err = conn.Exec(context.Background(),
@@ -192,12 +182,16 @@ func main() {
 						log.Fatalf("Insert failed: %v\n", err)
 					}
 
-					w.Header().Set("Content-Type", "application/x-protobuf")
-					w.Write([]byte("Database insert performed"))
 
+					w.Header().Set("Content-Type", "application/x-protobuf")
+					w.Write([]byte(fmt.Sprintf("%s results added to history for %s", unpackedRequest.MatchID, unpackedRequest.RiotName)))
+					
 					return
 				}
+
 			}
+
+			return
 		}
 
 	}))

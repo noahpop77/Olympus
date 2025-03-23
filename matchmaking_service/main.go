@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/noahpop77/Olympus/matchmaking_service/matchmaking"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -106,7 +107,30 @@ func main() {
 			return
 		}
 
-		matchmaking.AddPartyToRedis(w, unpackedRequest, rdb, ctx)
+		// TODO: Add a check to the main DB to pull rank from existing players from there
+		// rather than from the request. If nothing in db then use request
+
+		dsn := "postgres://sawa:sawa@postgres:5432/olympus"
+		conn, err := pgx.Connect(context.Background(), dsn)
+		if err != nil {
+			log.Fatalf("Unable to connect to database: %v\n", err)
+		}
+		defer conn.Close(context.Background())
+
+		// Validates with the summonerRankedInfo database and uses that value for the user if it exists
+		// If not then just use the one provided
+		var myRank int
+		err = conn.QueryRow(context.Background(),
+			`SELECT rank FROM "summonerRankedInfo" WHERE puuid = $1`, unpackedRequest.PlayerPuuid).
+			Scan(&myRank)
+		if err == pgx.ErrNoRows{
+			// defaults: rank=22 wins=0, losses=0
+			myRank = int(unpackedRequest.PlayerRank)
+		} else if err != nil && err != pgx.ErrNoRows {
+			log.Fatal("Failed to fetch summoner rank info:", err)
+		}
+
+		matchmaking.AddPartyToRedis(w, unpackedRequest, myRank, rdb, ctx)
 		
 		matchmakingContext, cancel := context.WithCancel(context.Background())
 		partyResourcesMap.Store(unpackedRequest.PartyId, matchmaking.PartyResources{
