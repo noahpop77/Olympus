@@ -16,6 +16,7 @@ import (
 Sets the shared match data in the sync.map for the given match for all 10 participants
 */
 func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUnixTime int64, TeamOnePUUIDStruct []string, TeamTwoPUUIDStruct []string, rng *rand.Rand) {
+	
 	var participants *gameServerProto.MatchResult
 	value, _ := activeMatches.Load(matchID)
 	if value != nil {
@@ -30,7 +31,6 @@ func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUni
 	} else {
 		winners = "two"
 	}
-
 
 	randomDuration := rng.Intn(300) + 60
 
