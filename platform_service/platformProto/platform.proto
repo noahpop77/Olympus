@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package platformProto;
+
+// The go_package option specifies the import path for the generated Go code.
+option go_package = "./platformProto";
+
+message MatchCreation {
+    string matchID = 1;
+    repeated string participantsPUUID = 2;
+}
+
+message MatchConnection {
+    string matchID = 1;
+    string participantPUUID = 2;
+    string riotName = 3;
+    string riotTag = 4;
+    string rank = 5;
+    string role = 6;
+    string partyId = 7;
+    string queueType = 8;
+}
+
+message MatchResult {
+    string matchID = 1;
+    string gameVersion = 2;
+    string gameDuration = 3;
+    string gameStartTime = 4; 
+    string gameEndTime = 5;
+    repeated string teamOnePUUID = 6;
+    repeated string teamTwoPUUID = 7;
+    repeated Participant participants = 8;
+    string winners = 9;
+}
+
+message Perk {
+    string perk = 1;
+}
+
+message Selection {
+    string perk = 1;
+}
+
+message Styles {
+    repeated Selection selections = 1;
+    string style = 2;
+}
+
+message Perks {
+    repeated Styles styles = 1;
+}
+
+message Participant {
+    int32 assists = 1;
+    int32 champExperience = 2;
+    int32 champLevel = 3;
+    int32 champId = 4;
+    string champName = 5;
+    int32 deaths = 6;
+    int32 goldEarned = 7;
+    string item0 = 8;
+    string item1 = 9;
+    string item2 = 10;
+    string item3 = 11;
+    string item4 = 12;
+    string item5 = 13;
+    string item6 = 14;
+    int32 kills = 15;
+    int32 neutralMinionsKilled = 16;
+    Perks perks = 17;
+    string riotName = 18;
+    string riotTag = 19;
+    string summoner1 = 20;
+    string summoner2 = 21;
+    string summonerName = 22;
+    int32 teamId = 23;
+    int32 totalAllyJungleMinionsKilled = 24;
+    int32 totalDamageDealtToChampions = 25;
+    int32 totalEnemyJungleMinionsKilled = 26;
+    int32 totalMinionsKilled = 27;
+    int32 visionScore = 28;
+    bool win = 29;
+}
+
+
+message MatchHistory {
+    string playerPUUID = 1;
+    repeated MatchResult matches = 2;
+}
+
+message UserProfile {
+    string puuid = 1;
+    string riotName = 2;
+    string riotTag = 3;
+    int32 rank = 4;
+    int32 wins = 5;
+    int32 losses = 6;
+}
