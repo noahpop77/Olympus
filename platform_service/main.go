@@ -6,6 +6,8 @@ import (
 	"net/http"
 )
 
+// TODO: Add metrics with Prometheus and Grafana
+
 func main() {
 	fmt.Println("Platform Service")
 
