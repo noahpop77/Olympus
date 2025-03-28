@@ -158,7 +158,7 @@ func main() {
 					// Define match data
 					matchID := randomMatch.MatchID
 					gameVer := randomMatch.GameVersion
-					riotID := unpackedRequest.ParticipantPUUID
+					puuid := unpackedRequest.ParticipantPUUID
 					gameDuration := randomMatch.GameDuration
 					gameCreationTimestamp := randomMatch.GameStartTime
 					gameEndTimestamp := randomMatch.GameEndTime
@@ -174,9 +174,9 @@ func main() {
 					// Execute INSERT query
 					_, err = conn.Exec(context.Background(),
 						`INSERT INTO "matchHistory" 
-						("matchID", "gameVer", "riotID", "gameDuration", "gameCreationTimestamp", "gameEndTimestamp", "teamOnePUUID", "teamTwoPUUID", "participants") 
+						("matchID", "gameVer", "puuid", "gameDuration", "gameCreationTimestamp", "gameEndTimestamp", "teamOnePUUID", "teamTwoPUUID", "participants") 
 						VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-						matchID, gameVer, riotID, gameDuration, gameCreationTimestamp, gameEndTimestamp, teamOnePUUID, teamTwoPUUID, participants)
+						matchID, gameVer, puuid, gameDuration, gameCreationTimestamp, gameEndTimestamp, teamOnePUUID, teamTwoPUUID, participants)
 
 					if err != nil {
 						log.Fatalf("Insert failed: %v\n", err)

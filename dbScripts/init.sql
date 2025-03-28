@@ -8,14 +8,14 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'olympus')\gexec
 CREATE TABLE IF NOT EXISTS "matchHistory" (
     "matchID"               VARCHAR(50) NOT NULL,
     "gameVer"               VARCHAR(50) NOT NULL,
-    "riotID"                VARCHAR(100) NOT NULL,
+    "puuid"                VARCHAR(100) NOT NULL,
     "gameDuration"          INT NOT NULL,
     "gameCreationTimestamp" INT NOT NULL,
     "gameEndTimestamp"      INT NOT NULL,
     "teamOnePUUID"          TEXT[] NOT NULL,
     "teamTwoPUUID"          TEXT[] NOT NULL,
     "participants"          JSON NOT NULL,
-    CONSTRAINT unique_pair_index UNIQUE ("matchID", "riotID")
+    CONSTRAINT unique_pair_index UNIQUE ("matchID", "puuid")
 );
 
 -- Create summonerRankedInfo table
