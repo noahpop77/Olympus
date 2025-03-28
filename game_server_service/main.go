@@ -58,17 +58,18 @@ func instrumentedHandler(endpoint string, handler func(http.ResponseWriter, *htt
 
 func PrintBanner(port string) {
 	fmt.Println(`=================================================
- ██████   █████  ███    ███ ███████ 
-██       ██   ██ ████  ████ ██      
-██   ███ ███████ ██ ████ ██ █████ 
-██    ██ ██   ██ ██  ██  ██ ██    
- ██████  ██   ██ ██      ██ ███████ 
-                                    
-███████ ███████ ██████  ██    ██ ███████ ██████ 
-██      ██      ██   ██ ██    ██ ██      ██   ██ 
-███████ █████   ██████  ██    ██ █████   ██████  
-     ██ ██      ██   ██  ██  ██  ██      ██   ██ 
-███████ ███████ ██   ██   ████   ███████ ██   ██ `)
+██████╗  █████╗ ███╗   ███╗███████╗             
+██╔════╝ ██╔══██╗████╗ ████║██╔════╝             
+██║  ███╗███████║██╔████╔██║█████╗               
+██║   ██║██╔══██║██║╚██╔╝██║██╔══╝               
+╚██████╔╝██║  ██║██║ ╚═╝ ██║███████╗             
+	╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝             				 
+███████╗███████╗██████╗ ██╗   ██╗███████╗██████╗ 
+██╔════╝██╔════╝██╔══██╗██║   ██║██╔════╝██╔══██╗
+███████╗█████╗  ██████╔╝██║   ██║█████╗  ██████╔╝
+╚════██║██╔══╝  ██╔══██╗╚██╗ ██╔╝██╔══╝  ██╔══██╗
+███████║███████╗██║  ██║ ╚████╔╝ ███████╗██║  ██║
+╚══════╝╚══════╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═╝`)
 	fmt.Println("=================================================")
 	fmt.Printf("Starting server on port %s...\n", port)
 	fmt.Println("=================================================")
@@ -88,6 +89,9 @@ func main() {
 	// Endpoint used to expose prometheus metrics
 	http.Handle("/metrics", promhttp.Handler())
 
+
+	// TODO: Add a timeout and delete to the match created if nobody connects within X amount of time.
+
 	// Spawns match in managed sync map to avoid collisions
 	http.HandleFunc("/spawnMatch", instrumentedHandler("/addMatch", func(w http.ResponseWriter, r *http.Request) {
 
@@ -99,6 +103,9 @@ func main() {
 
 		activeMatches.Store(unpackedRequest.MatchID, unpackedRequest)
 	}))
+
+
+	// TODO: PLEASE GOD CLEAN UP THIS FUNCTION CALL ITS SO DIRTY
 
 	// Endpoint that users will use to connect to the marked matches in the sync.Map
 	http.HandleFunc("/connectToMatch", instrumentedHandler("/connectToMatch", func(w http.ResponseWriter, r *http.Request) {
