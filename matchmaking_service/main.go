@@ -115,9 +115,6 @@ func main() {
 			return
 		}
 
-		// TODO: Add a check to the main DB to pull rank from existing players from there
-		// rather than from the request. If nothing in db then use request
-
 		dsn := "postgres://sawa:sawa@postgres:5432/olympus"
 		conn, err := pgx.Connect(context.Background(), dsn)
 		if err != nil {

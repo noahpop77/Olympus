@@ -2,6 +2,7 @@ package gameServer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -14,6 +15,25 @@ import (
 	"github.com/noahpop77/Olympus/game_server_service/game_server/gameServerProto"
 	"google.golang.org/protobuf/proto"
 )
+
+func PrintBanner(port string) {
+	fmt.Println(`=================================================
+██████╗  █████╗ ███╗   ███╗███████╗             
+██╔════╝ ██╔══██╗████╗ ████║██╔════╝             
+██║  ███╗███████║██╔████╔██║█████╗               
+██║   ██║██╔══██║██║╚██╔╝██║██╔══╝               
+╚██████╔╝██║  ██║██║ ╚═╝ ██║███████╗             
+	╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝             				 
+███████╗███████╗██████╗ ██╗   ██╗███████╗██████╗ 
+██╔════╝██╔════╝██╔══██╗██║   ██║██╔════╝██╔══██╗
+███████╗█████╗  ██████╔╝██║   ██║█████╗  ██████╔╝
+╚════██║██╔══╝  ██╔══██╗╚██╗ ██╔╝██╔══╝  ██╔══██╗
+███████║███████╗██║  ██║ ╚████╔╝ ███████╗██║  ██║
+╚══════╝╚══════╝╚═╝  ╚═╝  ╚═══╝  ╚══════╝╚═╝  ╚═╝`)
+	fmt.Println("=================================================")
+	fmt.Printf("Starting server on port %s...\n", port)
+	fmt.Println("=================================================")
+}
 
 // Base function for forms of unpacking requests
 func UnpackRequest(w http.ResponseWriter, r *http.Request, protoMessage proto.Message) error {
@@ -178,5 +198,98 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 			return nil
 		
 		}
+	}
+}
+
+
+// Endpoint that users will use to connect to the marked matches in the sync.Map
+// Consumed by the /connectToMatch endpoint
+func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *sync.Map, matchDataMap *sync.Map, matchParticipantsMap *sync.Map, databaseTransactionMutex *sync.Mutex){
+	unpackedRequest, err := UnpackConnectionRequest(w, r)
+	if err != nil {
+		http.Error(w, "Could not unpack the payload", http.StatusBadRequest)
+		return
+	}
+
+	// Loads data for relevant match that is in the marked sync.Map
+	validateSyncStore, ok := activeMatches.Load(unpackedRequest.MatchID)
+	if ok {
+		match, valid := validateSyncStore.(*gameServerProto.MatchCreation)
+		if !valid {
+			fmt.Println("Error: Type assertion failed")
+			return
+		}
+
+		// Loops through match PUUIDs in requested match ID to find out if you are in it
+		for _, value := range match.ParticipantsPUUID {
+			if value == unpackedRequest.ParticipantPUUID {
+				
+				err := ConnectPlayerToMatch(activeMatches, matchDataMap, match, matchParticipantsMap, unpackedRequest)
+				if err != nil {
+					http.Error(w, "Failed to connect player to match", http.StatusInternalServerError)
+					return
+				}
+
+				dsn := "postgres://sawa:sawa@postgres:5432/olympus"
+				conn, err := pgx.Connect(context.Background(), dsn)
+				if err != nil {
+					log.Fatalf("Unable to connect to database: %v\n", err)
+				}
+				defer conn.Close(context.Background())
+
+				value, _ := matchDataMap.Load(match.MatchID)
+				var randomMatch *gameServerProto.MatchResult
+				if value != nil {
+					randomMatch = value.(*gameServerProto.MatchResult)
+				}
+
+				participantValue, _ := matchParticipantsMap.Load(match.MatchID)
+				var randomParticipants []*gameServerProto.Participant
+				if participantValue != nil {
+					randomParticipants = participantValue.([]*gameServerProto.Participant)
+				}
+
+				participantJsonData, err := json.Marshal(randomParticipants)
+				if err != nil {
+					log.Fatalf("Failed to convert to JSON: %v", err)
+				}
+
+				// Define match data
+				matchID := randomMatch.MatchID
+				gameVer := randomMatch.GameVersion
+				puuid := unpackedRequest.ParticipantPUUID
+				gameDuration := randomMatch.GameDuration
+				gameCreationTimestamp := randomMatch.GameStartTime
+				gameEndTimestamp := randomMatch.GameEndTime
+				teamOnePUUID := randomMatch.TeamOnePUUID
+				teamTwoPUUID := randomMatch.TeamTwoPUUID
+				participants := participantJsonData
+
+				
+				databaseTransactionMutex.Lock()
+				UpdateProfile(conn, unpackedRequest, randomMatch)
+				databaseTransactionMutex.Unlock()
+				
+				// Execute INSERT query
+				_, err = conn.Exec(context.Background(),
+					`INSERT INTO "matchHistory" 
+					("matchID", "gameVer", "puuid", "gameDuration", "gameCreationTimestamp", "gameEndTimestamp", "teamOnePUUID", "teamTwoPUUID", "participants") 
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+					matchID, gameVer, puuid, gameDuration, gameCreationTimestamp, gameEndTimestamp, teamOnePUUID, teamTwoPUUID, participants)
+
+				if err != nil {
+					log.Fatalf("Insert failed: %v\n", err)
+				}
+
+
+				w.Header().Set("Content-Type", "application/x-protobuf")
+				w.Write([]byte(fmt.Sprintf("%s results added to history for %s", unpackedRequest.MatchID, unpackedRequest.RiotName)))
+				
+				return
+			}
+
+		}
+
+		return
 	}
 }
