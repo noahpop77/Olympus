@@ -11,7 +11,7 @@ COPY . .
 RUN go mod tidy
 
 # Build the Go application
-RUN go build -o gameServer main.go
+RUN go build -o gameServer .
 
 # Expose port 8080 for the server
 EXPOSE 8081

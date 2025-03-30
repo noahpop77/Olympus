@@ -28,13 +28,12 @@ var (
 	)
 )
 
-
 // Middleware for Prometheus metrics
 func instrumentedHandler(endpoint string, handler func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// The actual api request and functionality is here and everything else 
+		// The actual api request and functionality is here and everything else
 		// in the function is middleware fancieness
 		handler(w, r)
 
@@ -49,17 +48,19 @@ func init() {
 	prometheus.MustRegister(requestsTotal, requestDuration)
 }
 
-
-
 // TODO: Add metrics with Prometheus and Grafana
 
 func main() {
 	http.Handle("/metrics", promhttp.Handler())
 
 	http.HandleFunc("/matchHistory", instrumentedHandler("/matchHistory", func(w http.ResponseWriter, r *http.Request) {
-		getMatchHistory(w, r)
+		GetMatchHistory(w, r)
 	}))
-	
+
+	http.HandleFunc("/riotProfile", instrumentedHandler("/matchHistory", func(w http.ResponseWriter, r *http.Request) {
+		RiotProfile(w, r)
+	}))
+
 	port := ":8082"
 	PrintBanner(port)
 	log.Fatal(http.ListenAndServe(port, nil))

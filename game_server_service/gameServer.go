@@ -1,4 +1,4 @@
-package gameServer
+package main
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/noahpop77/Olympus/game_server_service/game_server/gameServerProto"
+	"github.com/noahpop77/Olympus/game_server_service/gameServerProto"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -23,7 +23,7 @@ func PrintBanner(port string) {
 ██║  ███╗███████║██╔████╔██║█████╗               
 ██║   ██║██╔══██║██║╚██╔╝██║██╔══╝               
 ╚██████╔╝██║  ██║██║ ╚═╝ ██║███████╗             
-	╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝             				 
+ ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝             				 
 ███████╗███████╗██████╗ ██╗   ██╗███████╗██████╗ 
 ██╔════╝██╔════╝██╔══██╗██║   ██║██╔════╝██╔══██╗
 ███████╗█████╗  ██████╔╝██║   ██║█████╗  ██████╔╝
@@ -86,15 +86,15 @@ func UnpackConnectionRequest(w http.ResponseWriter, r *http.Request) (*gameServe
 }
 
 func UpdateProfile(conn *pgx.Conn, unpackedRequest *gameServerProto.MatchConnection, randomMatch *gameServerProto.MatchResult) {
-	
+
 	var myTeam string
-	for _, value := range randomMatch.TeamOnePUUID{
+	for _, value := range randomMatch.TeamOnePUUID {
 		if value == unpackedRequest.ParticipantPUUID {
 			myTeam = "one"
 		}
 	}
 	if myTeam != "one" {
-		for _, value := range randomMatch.TeamTwoPUUID{
+		for _, value := range randomMatch.TeamTwoPUUID {
 			if value == unpackedRequest.ParticipantPUUID {
 				myTeam = "two"
 			}
@@ -107,7 +107,7 @@ func UpdateProfile(conn *pgx.Conn, unpackedRequest *gameServerProto.MatchConnect
 	err := conn.QueryRow(context.Background(),
 		`SELECT rank, wins, losses FROM "summonerRankedInfo" WHERE puuid = $1`, unpackedRequest.ParticipantPUUID).
 		Scan(&rank, &wins, &losses)
-	if err == pgx.ErrNoRows{
+	if err == pgx.ErrNoRows {
 		// defaults: rank=22 wins=0, losses=0
 		rank = unpackedRank
 		wins = 0
@@ -140,16 +140,15 @@ func UpdateProfile(conn *pgx.Conn, unpackedRequest *gameServerProto.MatchConnect
         "wins" = EXCLUDED."wins", 
         "losses" = EXCLUDED."losses";`,
 		unpackedRequest.ParticipantPUUID, unpackedRequest.RiotName, unpackedRequest.RiotTag, rank, wins, losses)
-	
-		if err != nil {
-			log.Fatalf("Insert failed: %v\n", err)
-		}
-}
 
+	if err != nil {
+		log.Fatalf("Insert failed: %v\n", err)
+	}
+}
 
 // Main functional loop handling connection function
 func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match *gameServerProto.MatchCreation, matchParticipantsMap *sync.Map, unpackedRequest *gameServerProto.MatchConnection) error {
-	
+
 	// Main loop tracking if player has connected or not
 	for {
 		if len(match.ParticipantsPUUID) != 10 {
@@ -157,7 +156,7 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 			time.Sleep(250 * time.Millisecond)
 			continue
 		} else {
-			
+
 			generateGameData(match, matchParticipantsMap, matchDataMap, unpackedRequest)
 
 			for {
@@ -187,7 +186,7 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 					// if value != nil {
 					// 	matchData = value.(*gameServerProto.MatchResult)
 					// }
-					
+
 					// gameDuration, _ := strconv.Atoi(matchData.GameDuration)
 					gameDuration := 1
 					time.Sleep(time.Duration(gameDuration) * time.Second)
@@ -196,15 +195,14 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 			}
 
 			return nil
-		
+
 		}
 	}
 }
 
-
 // Endpoint that users will use to connect to the marked matches in the sync.Map
 // Consumed by the /connectToMatch endpoint
-func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *sync.Map, matchDataMap *sync.Map, matchParticipantsMap *sync.Map, databaseTransactionMutex *sync.Mutex){
+func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *sync.Map, matchDataMap *sync.Map, matchParticipantsMap *sync.Map, databaseTransactionMutex *sync.Mutex) {
 	unpackedRequest, err := UnpackConnectionRequest(w, r)
 	if err != nil {
 		http.Error(w, "Could not unpack the payload", http.StatusBadRequest)
@@ -223,7 +221,7 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 		// Loops through match PUUIDs in requested match ID to find out if you are in it
 		for _, value := range match.ParticipantsPUUID {
 			if value == unpackedRequest.ParticipantPUUID {
-				
+
 				err := ConnectPlayerToMatch(activeMatches, matchDataMap, match, matchParticipantsMap, unpackedRequest)
 				if err != nil {
 					http.Error(w, "Failed to connect player to match", http.StatusInternalServerError)
@@ -265,11 +263,10 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 				teamTwoPUUID := randomMatch.TeamTwoPUUID
 				participants := participantJsonData
 
-				
 				databaseTransactionMutex.Lock()
 				UpdateProfile(conn, unpackedRequest, randomMatch)
 				databaseTransactionMutex.Unlock()
-				
+
 				// Execute INSERT query
 				_, err = conn.Exec(context.Background(),
 					`INSERT INTO "matchHistory" 
@@ -281,10 +278,9 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 					log.Fatalf("Insert failed: %v\n", err)
 				}
 
-
 				w.Header().Set("Content-Type", "application/x-protobuf")
 				w.Write([]byte(fmt.Sprintf("%s results added to history for %s", unpackedRequest.MatchID, unpackedRequest.RiotName)))
-				
+
 				return
 			}
 

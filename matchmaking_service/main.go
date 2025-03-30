@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/noahpop77/Olympus/matchmaking_service/matchmaking"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -108,9 +107,9 @@ func main() {
 		activeConnections.Inc()
 		defer activeConnections.Dec()
 		defer r.Context().Done()
-		
-		unpackedRequest := matchmaking.UnpackRequest(w, r)
-		if !matchmaking.UnpackedRequestValidation(unpackedRequest) {
+
+		unpackedRequest := UnpackRequest(w, r)
+		if !UnpackedRequestValidation(unpackedRequest) {
 			http.Error(w, "Missing requried data in payload", http.StatusBadRequest)
 			return
 		}
@@ -128,22 +127,22 @@ func main() {
 		err = conn.QueryRow(context.Background(),
 			`SELECT rank FROM "summonerRankedInfo" WHERE puuid = $1`, unpackedRequest.PlayerPuuid).
 			Scan(&myRank)
-		if err == pgx.ErrNoRows{
+		if err == pgx.ErrNoRows {
 			// defaults: rank=22 wins=0, losses=0
 			myRank = int(unpackedRequest.PlayerRank)
 		} else if err != nil && err != pgx.ErrNoRows {
 			log.Fatal("Failed to fetch summoner rank info:", err)
 		}
 
-		matchmaking.AddPartyToRedis(w, unpackedRequest, myRank, rdb, ctx)
-		
+		AddPartyToRedis(w, unpackedRequest, myRank, rdb, ctx)
+
 		matchmakingContext, cancel := context.WithCancel(context.Background())
-		partyResourcesMap.Store(unpackedRequest.PartyId, matchmaking.PartyResources{
+		partyResourcesMap.Store(unpackedRequest.PartyId, PartyResources{
 			CancelFunc: cancel,
 			Writer:     w,
 		})
 
-		matchmaking.MatchFinder(w, unpackedRequest, rdb, ctx, &partyResourcesMap, matchmakingContext, r, &mu)
+		MatchFinder(w, unpackedRequest, rdb, ctx, &partyResourcesMap, matchmakingContext, r, &mu)
 	}))
 
 	port := ":8080"

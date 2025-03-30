@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	gameServer "github.com/noahpop77/Olympus/game_server_service/game_server"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -64,13 +62,12 @@ func main() {
 	// Endpoint used to expose prometheus metrics
 	http.Handle("/metrics", promhttp.Handler())
 
-
 	// TODO: Add a timeout and delete to the match created if nobody connects within X amount of time.
 
 	// Spawns match in managed sync map to avoid collisions
 	http.HandleFunc("/spawnMatch", instrumentedHandler("/addMatch", func(w http.ResponseWriter, r *http.Request) {
 
-		unpackedRequest, err := gameServer.UnpackCreationRequest(w, r)
+		unpackedRequest, err := UnpackCreationRequest(w, r)
 		if err != nil {
 			http.Error(w, "Could not unpack the payload", http.StatusBadRequest)
 			return
@@ -79,15 +76,14 @@ func main() {
 
 	}))
 
-
 	http.HandleFunc("/connectToMatch", instrumentedHandler("/connectToMatch", func(w http.ResponseWriter, r *http.Request) {
 		activeConnections.Inc()
 		defer activeConnections.Dec()
-		gameServer.NewPlayerConnection(w, r, &activeMatches, &matchDataMap, &matchParticipantsMap, &databaseTransactionMutex)
-		
+		NewPlayerConnection(w, r, &activeMatches, &matchDataMap, &matchParticipantsMap, &databaseTransactionMutex)
+
 	}))
 
 	port := ":8081"
-	gameServer.PrintBanner(port)
+	PrintBanner(port)
 	log.Fatal(http.ListenAndServe(port, nil))
 }

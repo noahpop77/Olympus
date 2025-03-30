@@ -1,4 +1,4 @@
-package gameServer
+package main
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/noahpop77/Olympus/game_server_service/game_server/gameServerProto"
+	"github.com/noahpop77/Olympus/game_server_service/gameServerProto"
 )
 
 // TODO: Consider writing unit tests for generateGameData, generateRandomMatchData, and addParticipant. Testing the logic around generating random data will ensure that edge cases like empty or invalid inputs are handled properly, and that the sync.Map interactions behave as expected under concurrency.
@@ -16,7 +16,7 @@ import (
 Sets the shared match data in the sync.map for the given match for all 10 participants
 */
 func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUnixTime int64, TeamOnePUUIDStruct []string, TeamTwoPUUIDStruct []string, rng *rand.Rand) {
-	
+
 	var participants *gameServerProto.MatchResult
 	value, _ := activeMatches.Load(matchID)
 	if value != nil {
@@ -113,8 +113,8 @@ func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap
 				},
 			},
 		},
-		RiotName:                      unpackedRequest.RiotName,
-		RiotTag:                       unpackedRequest.RiotTag,
+		RiotName: unpackedRequest.RiotName,
+		RiotTag:  unpackedRequest.RiotTag,
 		// RiotName:                      fmt.Sprintf("RiotName_%s", RandomString(rng, 6)),
 		// RiotTag:                       RandomString(rng, 3),
 		Summoner1:                     "12",

@@ -26,7 +26,6 @@ func PrintBanner(port string) {
 	fmt.Println("=====================================================================")
 }
 
-
 // Base function for forms of unpacking requests
 func UnpackRequest(w http.ResponseWriter, r *http.Request, protoMessage proto.Message) error {
 	if r.Method != http.MethodPost {
@@ -47,8 +46,66 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request, protoMessage proto.Me
 	return nil
 }
 
+func RiotProfile(w http.ResponseWriter, r *http.Request) {
+	var unpackedRequest platformProto.UserProfile
+	UnpackRequest(w, r, &unpackedRequest)
 
-func getMatchHistory(w http.ResponseWriter, r *http.Request) {
+	// Connect to postgres database
+	// TODO: Make it not hardcoded at some point
+	dsn := "postgres://sawa:sawa@postgres:5432/olympus"
+	conn, err := pgx.Connect(context.Background(), dsn)
+	if err != nil {
+		log.Fatalf("Unable to connect to database: %v\n", err)
+		http.Error(w, "Unable to connect to the database", http.StatusNotFound)
+		return
+	}
+	defer conn.Close(context.Background())
+
+	rows, err := conn.Query(context.Background(),
+		`SELECT puuid, "riotName", "riotTag", rank, wins, losses FROM "summonerRankedInfo" WHERE "puuid" = $1`, unpackedRequest.Puuid)
+	if err != nil {
+		log.Fatalf("Failed to fetch summoner ranked information from DB: %v\n", err)
+		http.Error(w, "No data found", http.StatusNotFound)
+		return
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		log.Printf("No match found for PUUID: %s\n", unpackedRequest.Puuid)
+		http.Error(w, "No data found", http.StatusNotFound)
+		return
+	}
+
+	var puuid, riotName, riotTag string
+	var rank, wins, losses int
+
+	if err := rows.Scan(&puuid, &riotName, &riotTag, &rank, &wins, &losses); err != nil {
+		log.Printf("Failed to scan row: %v\n", err)
+		http.Error(w, "Unable to scan row", http.StatusNotFound)
+		return
+	}
+
+	response := &platformProto.UserProfile{
+		Puuid:    puuid,
+		RiotName: riotName,
+		RiotTag:  riotTag,
+		Rank:     int32(rank),
+		Wins:     int32(wins),
+		Losses:   int32(losses),
+	}
+
+	data, err := proto.Marshal(response)
+	if err != nil {
+		log.Fatalf("Failed to marshal response: %v\n", err)
+		http.Error(w, "Failed to marshal response", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/x-protobuf")
+	w.Write(data)
+}
+
+func GetMatchHistory(w http.ResponseWriter, r *http.Request) {
 	var unpackedRequest platformProto.MatchHistory
 	UnpackRequest(w, r, &unpackedRequest)
 
@@ -86,7 +143,7 @@ func getMatchHistory(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&matchID, &gameVer, &gameDuration, &gameCreationTimestamp, &gameEndTimestamp, &teamOnePUUID, &teamTwoPUUID, &participantsJSON); err != nil {
 			log.Printf("Failed to scan row: %v\n", err)
 			continue
-		}		
+		}
 
 		// This part kicked my ass a bit
 		// Due to the very specific structure of the participants field in the PostgreSQL database

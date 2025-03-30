@@ -1,4 +1,4 @@
-package matchmaking
+package main
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/noahpop77/Olympus/matchmaking_service/matchmaking/matchmakingProto"
+	"github.com/noahpop77/Olympus/matchmaking_service/matchmakingProto"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 )
@@ -25,10 +25,10 @@ type PartyResources struct {
 
 // matchedParty holds information about a party match.
 type matchedParty struct {
-	PlayerRiotName 	string
-	Key             string
-	Puuid           string
-	PlayerRank      string
+	PlayerRiotName string
+	Key            string
+	Puuid          string
+	PlayerRank     string
 }
 
 // WithinRankRange checks if the rank difference is within a specified range
@@ -78,7 +78,7 @@ func UnpackedRequestValidation(unpackedRequest *matchmakingProto.Players) bool {
 		return false
 	case unpackedRequest.PlayerRole != "Middle" && unpackedRequest.PlayerRole != "Top" && unpackedRequest.PlayerRole != "Jungle" && unpackedRequest.PlayerRole != "Bottom" && unpackedRequest.PlayerRole != "Support":
 		return false
-	
+
 	default:
 		return true
 	}
@@ -86,7 +86,7 @@ func UnpackedRequestValidation(unpackedRequest *matchmakingProto.Players) bool {
 
 // AddPartyToRedis handles party creation and Redis caching for the matchmaking request.
 func AddPartyToRedis(w http.ResponseWriter, unpackedRequest *matchmakingProto.Players, myRank int, rdb *redis.Client, ctx context.Context) {
-	
+
 	err := rdb.HSet(ctx, unpackedRequest.PartyId,
 		"PartyId", unpackedRequest.PartyId,
 		"QueueType", unpackedRequest.QueueType,
@@ -126,7 +126,7 @@ func ProvisionGameServer(matchData []byte) bool {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 200{
+	if resp.StatusCode == 200 {
 		return true
 	} else {
 		return false
@@ -175,9 +175,9 @@ func ProcessParty(ctx context.Context, rdb *redis.Client, unpackedRequest *match
 
 		*matches = append(*matches, matchedParty{
 			PlayerRiotName: hashData["PlayerRiotName"],
-			Key:             key,
-			Puuid:           hashData["PlayerPuuid"],
-			PlayerRank:      hashData["PlayerRank"],
+			Key:            key,
+			Puuid:          hashData["PlayerPuuid"],
+			PlayerRank:     hashData["PlayerRank"],
 		})
 		// for _, value := range hashData{
 		// 	log.Printf("%s", value)
@@ -185,7 +185,7 @@ func ProcessParty(ctx context.Context, rdb *redis.Client, unpackedRequest *match
 		return nil
 	}
 
-	if err == pgx.ErrNoRows{
+	if err == pgx.ErrNoRows {
 		return nil
 	} else {
 		return err
@@ -249,15 +249,14 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *matchmakingPro
 		return false
 	}
 
-
 	for _, key := range delKeys {
 		RemovePartyFromRedis(key, rdb, ctx)
 	}
 	RemovePartyFromRedis(unpackedRequest.PartyId, rdb, ctx)
 
-	// Protobuf format for message 
+	// Protobuf format for message
 	response := &matchmakingProto.MatchResponse{
-		MatchID:      generateMatchID(),
+		MatchID:           generateMatchID(),
 		ParticipantsPUUID: []string{},
 	}
 

@@ -34,6 +34,40 @@ This is a high level design diagram detailing a some requirements for specific c
 ![Design Diagram](docs/images/designDiagram.png)
 
 
+# Project Styling Guidelines
+
+## IN THIS HOUSE WE USE TABS NOT SPACES
+
+## Naming conventions
+
+- Each service will have a main directory under the top level of the repo in snake case naming
+- File names are in camel case
+- Function and varialbe names will adhere to Camel Case unless this clashes with GO and its use of Pascal Case
+- Variables intended to be constants will be in something like all UPPER CASE
+
+## Project Structur
+The basic structure is of creating services will look like the following:
+```
+.
+└── Olympus/
+    ├── game_server_service
+    ├── platform_service
+    ├── matchmaking_service/
+    │   ├── {serviceName}Proto/
+    │   │   ├── {serviceName}.pb.go
+    │   │   └── {serviceName}.proto
+    │   ├── main.go
+    │   └── Other required service files...
+    ├── dbScripts/
+    │   └── init.sql
+    ├── .gitignore
+    ├── docker-compose.yaml
+    ├── prometheus.yml
+    ├── LICENSE
+    └── README.md
+```
+
+
 # Personal Notes
 
 Personal scratchpad for random facts, links, notes, or points of note.
