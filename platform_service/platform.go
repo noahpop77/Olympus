@@ -46,6 +46,7 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request, protoMessage proto.Me
 	return nil
 }
 
+// Gets some riot account stats as specified in the summonerRankedInfo table of the postgres database
 func RiotProfile(w http.ResponseWriter, r *http.Request) {
 	var unpackedRequest platformProto.UserProfile
 	UnpackRequest(w, r, &unpackedRequest)
@@ -61,6 +62,7 @@ func RiotProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close(context.Background())
 
+	// Gets the single row containing the account information, nothing else
 	rows, err := conn.Query(context.Background(),
 		`SELECT puuid, "riotName", "riotTag", rank, wins, losses FROM "summonerRankedInfo" WHERE "puuid" = $1`, unpackedRequest.Puuid)
 	if err != nil {
@@ -70,15 +72,16 @@ func RiotProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
+	// Places the cursor on the 
 	if !rows.Next() {
 		log.Printf("No match found for PUUID: %s\n", unpackedRequest.Puuid)
 		http.Error(w, "No data found", http.StatusNotFound)
 		return
 	}
 
+	// Assigns the values of the row to mutable variables we can work with in GO
 	var puuid, riotName, riotTag string
 	var rank, wins, losses int
-
 	if err := rows.Scan(&puuid, &riotName, &riotTag, &rank, &wins, &losses); err != nil {
 		log.Printf("Failed to scan row: %v\n", err)
 		http.Error(w, "Unable to scan row", http.StatusNotFound)

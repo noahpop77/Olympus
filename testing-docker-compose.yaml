@@ -1,0 +1,55 @@
+version: "3.8"
+
+services:
+  matchmaking_redis:
+    image: redis:latest
+    container_name: matchmaking_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--loglevel", "nothing"]
+    
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    depends_on:
+      - postgres
+    ports:
+      - "9090:9090"
+    command:
+    - "--log.level=error"
+    - "--config.file=/etc/prometheus/prometheus.yml"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    environment:
+    - GF_LOG_LEVEL=error
+    volumes:
+      - ./grafana_data:/var/lib/grafana
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: sawa
+      POSTGRES_PASSWORD: sawa
+      POSTGRES_DB: olympus
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./dbScripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    
+volumes:
+  prometheus_data:
+  grafana_data:
+  postgres_data:

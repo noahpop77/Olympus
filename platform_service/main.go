@@ -48,15 +48,17 @@ func init() {
 	prometheus.MustRegister(requestsTotal, requestDuration)
 }
 
-// TODO: Add metrics with Prometheus and Grafana
-
 func main() {
 	http.Handle("/metrics", promhttp.Handler())
 
+	// Simulates looking at the match history page of the client
+	// Returns a list of matches with their match ID values as well as their in game data
 	http.HandleFunc("/matchHistory", instrumentedHandler("/matchHistory", func(w http.ResponseWriter, r *http.Request) {
 		GetMatchHistory(w, r)
 	}))
 
+	// Simulates looking at your summoner profile
+	// Returns puuid, riotName, riotTag, rank, wins, losses
 	http.HandleFunc("/riotProfile", instrumentedHandler("/matchHistory", func(w http.ResponseWriter, r *http.Request) {
 		RiotProfile(w, r)
 	}))

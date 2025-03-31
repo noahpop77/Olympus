@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -55,7 +56,7 @@ func init() {
 
 func main() {
 	var activeMatches sync.Map
-	var matchDataMap sync.Map
+	var matchDataMap sync.Map // TODO: Delete after usage is busted for this, circle back
 	var matchParticipantsMap sync.Map
 	var databaseTransactionMutex sync.Mutex
 
@@ -80,9 +81,19 @@ func main() {
 		activeConnections.Inc()
 		defer activeConnections.Dec()
 		NewPlayerConnection(w, r, &activeMatches, &matchDataMap, &matchParticipantsMap, &databaseTransactionMutex)
-
 	}))
 
+	http.HandleFunc("/activeMatches", instrumentedHandler("/connectToMatch", func(w http.ResponseWriter, r *http.Request) {
+		var outString string
+		matchDataMap.Range(func(key, value interface{}) bool {
+			outString += fmt.Sprintf("%s, %s\n", key, value)
+			return true
+		})
+
+		w.Write([]byte(outString))
+	}))
+
+	
 	port := ":8081"
 	PrintBanner(port)
 	log.Fatal(http.ListenAndServe(port, nil))

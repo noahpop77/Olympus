@@ -190,6 +190,7 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 					// gameDuration, _ := strconv.Atoi(matchData.GameDuration)
 					gameDuration := 1
 					time.Sleep(time.Duration(gameDuration) * time.Second)
+
 					break
 				}
 			}
@@ -281,11 +282,29 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 				w.Header().Set("Content-Type", "application/x-protobuf")
 				w.Write([]byte(fmt.Sprintf("%s results added to history for %s", unpackedRequest.MatchID, unpackedRequest.RiotName)))
 
+				// Key Exists: 			Deletes key
+				// Key doesn't exist: 	Does nothing and just moves on
+				activeMatches.Delete(match.MatchID)
+				matchParticipantsMap.Delete(match.MatchID)
+				// TODO: FIX THIS NIL POINTER DE-REFERENCE ERROR WHEN YOU WAKE UP IN THE MORNING
+				// Its not that its experiencing a race condition since the delete is fairly atomically
+				// Its being accessed at some point after this which is causing a nil pointer dereference
+				// It might be deleting it before it is initialized or referencing it after delete
+				
+				// WORKS WITH DELAYED DELETION
+				// NEED SOME SORT OF MECHANISM TO MAKE SURE DELETION IS NOT HAPPENING
+				// TILL EVERY THREAD HAS PASSED THIS FUNCTION. LINES REFERENCING 
+				// RANDOMMATCH.MATCHID IS CAUSING PROBLEMS CAUSE ITS REFERENCING AFTER 
+				// DELETION CAUSE SOME THREADS ARE AHEAD OF OTHERS
+				time.Sleep(1000 * time.Millisecond) 
+				
+				// Prob gonna have to use wait groups
+				matchDataMap.Delete(match.MatchID)
 				return
 			}
 
 		}
-
+		
 		return
 	}
 }
