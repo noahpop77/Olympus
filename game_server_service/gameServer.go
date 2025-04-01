@@ -108,7 +108,6 @@ func UpdateProfile(conn *pgx.Conn, unpackedRequest *gameServerProto.MatchConnect
 		`SELECT rank, wins, losses FROM "summonerRankedInfo" WHERE puuid = $1`, unpackedRequest.ParticipantPUUID).
 		Scan(&rank, &wins, &losses)
 	if err == pgx.ErrNoRows {
-		// defaults: rank=22 wins=0, losses=0
 		rank = unpackedRank
 		wins = 0
 		losses = 0
@@ -203,7 +202,7 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 
 // Endpoint that users will use to connect to the marked matches in the sync.Map
 // Consumed by the /connectToMatch endpoint
-func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *sync.Map, matchDataMap *sync.Map, matchParticipantsMap *sync.Map, databaseTransactionMutex *sync.Mutex) {
+func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *sync.Map, matchDataMap *sync.Map, matchParticipantsMap *sync.Map, databaseTransactionMutex *sync.Mutex, waitGroupMap *sync.Map) {
 	unpackedRequest, err := UnpackConnectionRequest(w, r)
 	if err != nil {
 		http.Error(w, "Could not unpack the payload", http.StatusBadRequest)
@@ -218,12 +217,25 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 			fmt.Println("Error: Type assertion failed")
 			return
 		}
-		var wg sync.WaitGroup
+		
+		// Accesses the sync.map containing the different wait groups that are associated with the matches themselves
+		// Associated with the global service level sync maps in main.go
+		var wg *sync.WaitGroup
+		if tempWaitGroup, exists := waitGroupMap.Load(unpackedRequest.MatchID); exists {
+			wg = tempWaitGroup.(*sync.WaitGroup)
+		} else {
+			wg = &sync.WaitGroup{}
+			waitGroupMap.Store(unpackedRequest.MatchID, wg)
+		}
 
 		// Loops through match PUUIDs in requested match ID to find out if you are in it
 		for _, value := range match.ParticipantsPUUID {
 			if value == unpackedRequest.ParticipantPUUID {
+
 				wg.Add(1)
+
+				// Main code block related to handling DB interactions 
+				// for the match history for each player
 				go func() {
 					defer wg.Done()
 					err := ConnectPlayerToMatch(activeMatches, matchDataMap, match, matchParticipantsMap, unpackedRequest)
@@ -232,6 +244,7 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 						return
 					}
 
+					// Postgres container connection
 					dsn := "postgres://sawa:sawa@postgres:5432/olympus"
 					conn, err := pgx.Connect(context.Background(), dsn)
 					if err != nil {
@@ -240,7 +253,6 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 					defer conn.Close(context.Background())
 
 					value, _ := matchDataMap.Load(match.MatchID)
-					// log.Printf("\n-----------------\n%s\n-----------------\n", value)
 					var randomMatch *gameServerProto.MatchResult
 					if value != nil {
 						randomMatch = value.(*gameServerProto.MatchResult)
@@ -287,29 +299,23 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 					w.Write([]byte(fmt.Sprintf("%s results added to history for %s", unpackedRequest.MatchID, unpackedRequest.RiotName)))
 				}()
 				wg.Wait()
-
-				// Key Exists: 			Deletes key
-				// Key doesn't exist: 	Does nothing and just moves on
-				activeMatches.Delete(match.MatchID)
+				
+				// Deleting the associated data in the global sync maps
+				//     containing things like match data, match wait group, and other stuff
+				// If this is not deleted the service will just baloon in resource usage
+				// 	    the more matches are run through it
 				matchParticipantsMap.Delete(match.MatchID)
-				// TODO: FIX THIS NIL POINTER DE-REFERENCE ERROR WHEN YOU WAKE UP IN THE MORNING
-				// Its not that its experiencing a race condition since the delete is fairly atomically
-				// Its being accessed at some point after this which is causing a nil pointer dereference
-				// It might be deleting it before it is initialized or referencing it after delete
-
-				// WORKS WITH DELAYED DELETION
-				// NEED SOME SORT OF MECHANISM TO MAKE SURE DELETION IS NOT HAPPENING
-				// TILL EVERY THREAD HAS PASSED THIS FUNCTION. LINES REFERENCING
-				// RANDOMMATCH.MATCHID IS CAUSING PROBLEMS CAUSE ITS REFERENCING AFTER
-				// DELETION CAUSE SOME THREADS ARE AHEAD OF OTHERS
-				time.Sleep(5000 * time.Millisecond)
-				// Prob gonna have to use wait groups
+				activeMatches.Delete(match.MatchID)
+				waitGroupMap.Delete(match.MatchID)
 				matchDataMap.Delete(match.MatchID)
+				
+				// Success case
 				return
 			}
 
 		}
 
+		// Player not found in match
 		return
 	}
 }

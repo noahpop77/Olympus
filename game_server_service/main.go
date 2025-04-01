@@ -55,18 +55,21 @@ func init() {
 }
 
 func main() {
+	// Global data structures containing global match info so different requests
+	//     can share data, other options are probably best but this works
 	var activeMatches sync.Map
-	var matchDataMap sync.Map // TODO: Delete after usage is busted for this, circle back
+	var matchDataMap sync.Map
 	var matchParticipantsMap sync.Map
 	var databaseTransactionMutex sync.Mutex
-	// TODO: Possibly add a sync.map containing a link between matchIDs as the key and specific match wait groups that will be called during resource deletion
+	var waitGroupMap sync.Map
 
 	// Endpoint used to expose prometheus metrics
 	http.Handle("/metrics", promhttp.Handler())
 
 	// TODO: Add a timeout and delete to the match created if nobody connects within X amount of time.
 
-	// Spawns match in managed sync map to avoid collisions
+	// Matchmaking Service triggers this to spawn a match containing a valid matchID and 10 players that
+	// are white listed to connect to that match
 	http.HandleFunc("/spawnMatch", instrumentedHandler("/addMatch", func(w http.ResponseWriter, r *http.Request) {
 
 		unpackedRequest, err := UnpackCreationRequest(w, r)
@@ -78,12 +81,15 @@ func main() {
 
 	}))
 
+	// Each individual player connects to this endpoint while passing in their PUUID and target matchId
 	http.HandleFunc("/connectToMatch", instrumentedHandler("/connectToMatch", func(w http.ResponseWriter, r *http.Request) {
 		activeConnections.Inc()
 		defer activeConnections.Dec()
-		NewPlayerConnection(w, r, &activeMatches, &matchDataMap, &matchParticipantsMap, &databaseTransactionMutex)
+
+		NewPlayerConnection(w, r, &activeMatches, &matchDataMap, &matchParticipantsMap, &databaseTransactionMutex, &waitGroupMap)
 	}))
 
+	// Test function for inspecting sync maps
 	http.HandleFunc("/activeMatches", instrumentedHandler("/connectToMatch", func(w http.ResponseWriter, r *http.Request) {
 		var outString string
 		matchDataMap.Range(func(key, value interface{}) bool {
@@ -91,9 +97,15 @@ func main() {
 			return true
 		})
 
+		waitGroupMap.Range(func(key, value interface{}) bool {
+			outString += fmt.Sprintf("%s, %s\n", key, value)
+			return true
+		})
+
 		w.Write([]byte(outString))
 	}))
 
+	// Launch web server
 	port := ":8081"
 	PrintBanner(port)
 	log.Fatal(http.ListenAndServe(port, nil))
