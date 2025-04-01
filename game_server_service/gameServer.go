@@ -218,69 +218,75 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 			fmt.Println("Error: Type assertion failed")
 			return
 		}
+		var wg sync.WaitGroup
 
 		// Loops through match PUUIDs in requested match ID to find out if you are in it
 		for _, value := range match.ParticipantsPUUID {
 			if value == unpackedRequest.ParticipantPUUID {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					err := ConnectPlayerToMatch(activeMatches, matchDataMap, match, matchParticipantsMap, unpackedRequest)
+					if err != nil {
+						http.Error(w, "Failed to connect player to match", http.StatusInternalServerError)
+						return
+					}
 
-				err := ConnectPlayerToMatch(activeMatches, matchDataMap, match, matchParticipantsMap, unpackedRequest)
-				if err != nil {
-					http.Error(w, "Failed to connect player to match", http.StatusInternalServerError)
-					return
-				}
+					dsn := "postgres://sawa:sawa@postgres:5432/olympus"
+					conn, err := pgx.Connect(context.Background(), dsn)
+					if err != nil {
+						log.Fatalf("Unable to connect to database: %v\n", err)
+					}
+					defer conn.Close(context.Background())
 
-				dsn := "postgres://sawa:sawa@postgres:5432/olympus"
-				conn, err := pgx.Connect(context.Background(), dsn)
-				if err != nil {
-					log.Fatalf("Unable to connect to database: %v\n", err)
-				}
-				defer conn.Close(context.Background())
+					value, _ := matchDataMap.Load(match.MatchID)
+					// log.Printf("\n-----------------\n%s\n-----------------\n", value)
+					var randomMatch *gameServerProto.MatchResult
+					if value != nil {
+						randomMatch = value.(*gameServerProto.MatchResult)
+					}
 
-				value, _ := matchDataMap.Load(match.MatchID)
-				var randomMatch *gameServerProto.MatchResult
-				if value != nil {
-					randomMatch = value.(*gameServerProto.MatchResult)
-				}
+					participantValue, _ := matchParticipantsMap.Load(match.MatchID)
+					var randomParticipants []*gameServerProto.Participant
+					if participantValue != nil {
+						randomParticipants = participantValue.([]*gameServerProto.Participant)
+					}
 
-				participantValue, _ := matchParticipantsMap.Load(match.MatchID)
-				var randomParticipants []*gameServerProto.Participant
-				if participantValue != nil {
-					randomParticipants = participantValue.([]*gameServerProto.Participant)
-				}
+					participantJsonData, err := json.Marshal(randomParticipants)
+					if err != nil {
+						log.Fatalf("Failed to convert to JSON: %v", err)
+					}
 
-				participantJsonData, err := json.Marshal(randomParticipants)
-				if err != nil {
-					log.Fatalf("Failed to convert to JSON: %v", err)
-				}
+					// Define match data
+					matchID := randomMatch.MatchID
+					gameVer := randomMatch.GameVersion
+					puuid := unpackedRequest.ParticipantPUUID
+					gameDuration := randomMatch.GameDuration
+					gameCreationTimestamp := randomMatch.GameStartTime
+					gameEndTimestamp := randomMatch.GameEndTime
+					teamOnePUUID := randomMatch.TeamOnePUUID
+					teamTwoPUUID := randomMatch.TeamTwoPUUID
+					participants := participantJsonData
 
-				// Define match data
-				matchID := randomMatch.MatchID
-				gameVer := randomMatch.GameVersion
-				puuid := unpackedRequest.ParticipantPUUID
-				gameDuration := randomMatch.GameDuration
-				gameCreationTimestamp := randomMatch.GameStartTime
-				gameEndTimestamp := randomMatch.GameEndTime
-				teamOnePUUID := randomMatch.TeamOnePUUID
-				teamTwoPUUID := randomMatch.TeamTwoPUUID
-				participants := participantJsonData
+					databaseTransactionMutex.Lock()
+					UpdateProfile(conn, unpackedRequest, randomMatch)
+					databaseTransactionMutex.Unlock()
 
-				databaseTransactionMutex.Lock()
-				UpdateProfile(conn, unpackedRequest, randomMatch)
-				databaseTransactionMutex.Unlock()
+					// Execute INSERT query
+					_, err = conn.Exec(context.Background(),
+						`INSERT INTO "matchHistory" 
+						("matchID", "gameVer", "puuid", "gameDuration", "gameCreationTimestamp", "gameEndTimestamp", "teamOnePUUID", "teamTwoPUUID", "participants") 
+						VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+						matchID, gameVer, puuid, gameDuration, gameCreationTimestamp, gameEndTimestamp, teamOnePUUID, teamTwoPUUID, participants)
 
-				// Execute INSERT query
-				_, err = conn.Exec(context.Background(),
-					`INSERT INTO "matchHistory" 
-					("matchID", "gameVer", "puuid", "gameDuration", "gameCreationTimestamp", "gameEndTimestamp", "teamOnePUUID", "teamTwoPUUID", "participants") 
-					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-					matchID, gameVer, puuid, gameDuration, gameCreationTimestamp, gameEndTimestamp, teamOnePUUID, teamTwoPUUID, participants)
+					if err != nil {
+						log.Fatalf("Insert failed: %v\n", err)
+					}
 
-				if err != nil {
-					log.Fatalf("Insert failed: %v\n", err)
-				}
-
-				w.Header().Set("Content-Type", "application/x-protobuf")
-				w.Write([]byte(fmt.Sprintf("%s results added to history for %s", unpackedRequest.MatchID, unpackedRequest.RiotName)))
+					w.Header().Set("Content-Type", "application/x-protobuf")
+					w.Write([]byte(fmt.Sprintf("%s results added to history for %s", unpackedRequest.MatchID, unpackedRequest.RiotName)))
+				}()
+				wg.Wait()
 
 				// Key Exists: 			Deletes key
 				// Key doesn't exist: 	Does nothing and just moves on
@@ -290,21 +296,20 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 				// Its not that its experiencing a race condition since the delete is fairly atomically
 				// Its being accessed at some point after this which is causing a nil pointer dereference
 				// It might be deleting it before it is initialized or referencing it after delete
-				
+
 				// WORKS WITH DELAYED DELETION
 				// NEED SOME SORT OF MECHANISM TO MAKE SURE DELETION IS NOT HAPPENING
-				// TILL EVERY THREAD HAS PASSED THIS FUNCTION. LINES REFERENCING 
-				// RANDOMMATCH.MATCHID IS CAUSING PROBLEMS CAUSE ITS REFERENCING AFTER 
+				// TILL EVERY THREAD HAS PASSED THIS FUNCTION. LINES REFERENCING
+				// RANDOMMATCH.MATCHID IS CAUSING PROBLEMS CAUSE ITS REFERENCING AFTER
 				// DELETION CAUSE SOME THREADS ARE AHEAD OF OTHERS
-				time.Sleep(1000 * time.Millisecond) 
-				
+				time.Sleep(5000 * time.Millisecond)
 				// Prob gonna have to use wait groups
 				matchDataMap.Delete(match.MatchID)
 				return
 			}
 
 		}
-		
+
 		return
 	}
 }

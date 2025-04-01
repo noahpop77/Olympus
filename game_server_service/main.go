@@ -59,6 +59,7 @@ func main() {
 	var matchDataMap sync.Map // TODO: Delete after usage is busted for this, circle back
 	var matchParticipantsMap sync.Map
 	var databaseTransactionMutex sync.Mutex
+	// TODO: Possibly add a sync.map containing a link between matchIDs as the key and specific match wait groups that will be called during resource deletion
 
 	// Endpoint used to expose prometheus metrics
 	http.Handle("/metrics", promhttp.Handler())
@@ -93,7 +94,6 @@ func main() {
 		w.Write([]byte(outString))
 	}))
 
-	
 	port := ":8081"
 	PrintBanner(port)
 	log.Fatal(http.ListenAndServe(port, nil))
