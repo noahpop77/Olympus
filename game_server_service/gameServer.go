@@ -207,6 +207,7 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *sync.Map, matchDataMap *sync.Map, matchParticipantsMap *sync.Map, databaseTransactionMutex *sync.Mutex, waitGroupMap *sync.Map) {
 	unpackedRequest, err := UnpackConnectionRequest(w, r)
 	if err != nil {
+		log.Printf("Could not unpack the payload: %s\n", err)
 		http.Error(w, "Could not unpack the payload", http.StatusBadRequest)
 		return
 	}
@@ -242,7 +243,8 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 					defer wg.Done()
 					err := ConnectPlayerToMatch(activeMatches, matchDataMap, match, matchParticipantsMap, unpackedRequest)
 					if err != nil {
-						http.Error(w, "Failed to connect player to match", http.StatusInternalServerError)
+						log.Printf("Failed to connect player to match: %s\n", err)
+						http.Error(w, fmt.Sprintf("Failed to connect player to match: %s", err), http.StatusBadRequest)
 						return
 					}
 
@@ -250,6 +252,7 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 					dsn := "postgres://sawa:sawa@postgres:5432/olympus"
 					conn, err := pgx.Connect(context.Background(), dsn)
 					if err != nil {
+						log.Printf("Unable to connect to database: %s\n", err)
 						http.Error(w, fmt.Sprintf("Unable to connect to database: %s", err), http.StatusBadRequest)
 						return
 					}
@@ -269,6 +272,7 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 
 					participantJsonData, err := json.Marshal(randomParticipants)
 					if err != nil {
+						log.Printf("Failed to convert to JSON: %s", err)
 						http.Error(w, fmt.Sprintf("Failed to convert to JSON: %s", err), http.StatusBadRequest)
 						return
 					}
@@ -287,6 +291,7 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 					databaseTransactionMutex.Lock()
 					err = UpdateProfile(conn, unpackedRequest, randomMatch)
 					if err != nil {
+						log.Printf("Could not update summoner data in database: %s\n", err)
 						http.Error(w, fmt.Sprintf("Could not update summoner data in database: %s", err), http.StatusBadRequest)
 						return
 					}
@@ -300,6 +305,7 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 						matchID, gameVer, puuid, gameDuration, gameCreationTimestamp, gameEndTimestamp, teamOnePUUID, teamTwoPUUID, participants)
 
 					if err != nil {
+						log.Printf("Match history insert failed: %s\n", err)
 						http.Error(w, fmt.Sprintf("Match history insert failed: %s", err), http.StatusBadRequest)
 						return
 					}
