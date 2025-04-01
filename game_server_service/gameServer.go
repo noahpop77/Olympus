@@ -85,7 +85,7 @@ func UnpackConnectionRequest(w http.ResponseWriter, r *http.Request) (*gameServe
 	return &unpackedRequest, nil
 }
 
-func UpdateProfile(conn *pgx.Conn, unpackedRequest *gameServerProto.MatchConnection, randomMatch *gameServerProto.MatchResult) {
+func UpdateProfile(conn *pgx.Conn, unpackedRequest *gameServerProto.MatchConnection, randomMatch *gameServerProto.MatchResult) error {
 
 	var myTeam string
 	for _, value := range randomMatch.TeamOnePUUID {
@@ -112,7 +112,7 @@ func UpdateProfile(conn *pgx.Conn, unpackedRequest *gameServerProto.MatchConnect
 		wins = 0
 		losses = 0
 	} else if err != nil && err != pgx.ErrNoRows {
-		log.Fatal("Failed to fetch summoner rank info:", err)
+		return fmt.Errorf("failed to fetch summoner rank info: %v", err)
 	}
 
 	if myTeam == randomMatch.Winners {
@@ -141,8 +141,10 @@ func UpdateProfile(conn *pgx.Conn, unpackedRequest *gameServerProto.MatchConnect
 		unpackedRequest.ParticipantPUUID, unpackedRequest.RiotName, unpackedRequest.RiotTag, rank, wins, losses)
 
 	if err != nil {
-		log.Fatalf("Insert failed: %v\n", err)
+		return fmt.Errorf("insert failed: %v", err)
 	}
+
+	return nil
 }
 
 // Main functional loop handling connection function
@@ -248,7 +250,8 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 					dsn := "postgres://sawa:sawa@postgres:5432/olympus"
 					conn, err := pgx.Connect(context.Background(), dsn)
 					if err != nil {
-						log.Fatalf("Unable to connect to database: %v\n", err)
+						http.Error(w, fmt.Sprintf("Unable to connect to database: %s", err), http.StatusBadRequest)
+						return
 					}
 					defer conn.Close(context.Background())
 
@@ -266,7 +269,8 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 
 					participantJsonData, err := json.Marshal(randomParticipants)
 					if err != nil {
-						log.Fatalf("Failed to convert to JSON: %v", err)
+						http.Error(w, fmt.Sprintf("Failed to convert to JSON: %s", err), http.StatusBadRequest)
+						return
 					}
 
 					// Define match data
@@ -281,7 +285,11 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 					participants := participantJsonData
 
 					databaseTransactionMutex.Lock()
-					UpdateProfile(conn, unpackedRequest, randomMatch)
+					err = UpdateProfile(conn, unpackedRequest, randomMatch)
+					if err != nil {
+						http.Error(w, fmt.Sprintf("Could not update summoner data in database: %s", err), http.StatusBadRequest)
+						return
+					}
 					databaseTransactionMutex.Unlock()
 
 					// Execute INSERT query
@@ -292,7 +300,8 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 						matchID, gameVer, puuid, gameDuration, gameCreationTimestamp, gameEndTimestamp, teamOnePUUID, teamTwoPUUID, participants)
 
 					if err != nil {
-						log.Fatalf("Insert failed: %v\n", err)
+						http.Error(w, fmt.Sprintf("Match history insert failed: %s", err), http.StatusBadRequest)
+						return
 					}
 
 					w.Header().Set("Content-Type", "application/x-protobuf")
