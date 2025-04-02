@@ -63,6 +63,14 @@ func main() {
 		RiotProfile(w, r)
 	}))
 
+	http.HandleFunc("/health", instrumentedHandler("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	http.HandleFunc("/databaseHealth", instrumentedHandler("/databaseHealth", func(w http.ResponseWriter, r *http.Request) {
+		DatabaseHealthCheck(w, r)
+	}))
+
 	port := ":8082"
 	PrintBanner(port)
 	log.Fatal(http.ListenAndServe(port, nil))

@@ -1,0 +1,12 @@
+modules:
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_http_versions: []
+      headers:
+        User-Agent: "Blackbox Exporter"
+      body: ""
+      tls_config:
+        insecure_skip_verify: false

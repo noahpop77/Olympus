@@ -46,6 +46,25 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request, protoMessage proto.Me
 	return nil
 }
 
+func DatabaseHealthCheck(w http.ResponseWriter, r *http.Request) {
+	dsn := "postgres://sawa:sawa@postgres:5432/olympus"
+	conn, err := pgx.Connect(context.Background(), dsn)
+	if err != nil {
+		log.Printf("Unable to connect to database: %s\n", err)
+		http.Error(w, fmt.Sprintf("Unable to connect to database: %s", err), http.StatusBadRequest)
+		return
+	}
+	defer conn.Close(context.Background())
+	var result string
+	err = conn.QueryRow(context.Background(), "SELECT 'ok'").Scan(&result)
+	if err != nil {
+		http.Error(w, "Database query failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 // Gets some riot account stats as specified in the summonerRankedInfo table of the postgres database
 func RiotProfile(w http.ResponseWriter, r *http.Request) {
 	var unpackedRequest platformProto.UserProfile

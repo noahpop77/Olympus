@@ -70,7 +70,7 @@ func main() {
 
 	// Matchmaking Service triggers this to spawn a match containing a valid matchID and 10 players that
 	// are white listed to connect to that match
-	http.HandleFunc("/spawnMatch", instrumentedHandler("/addMatch", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/spawnMatch", instrumentedHandler("/spawnMatch", func(w http.ResponseWriter, r *http.Request) {
 
 		unpackedRequest, err := UnpackCreationRequest(w, r)
 		if err != nil {
@@ -90,7 +90,7 @@ func main() {
 	}))
 
 	// Test function for inspecting sync maps
-	http.HandleFunc("/activeMatches", instrumentedHandler("/connectToMatch", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/activeMatches", instrumentedHandler("/activeMatches", func(w http.ResponseWriter, r *http.Request) {
 		var outString string
 		matchDataMap.Range(func(key, value interface{}) bool {
 			outString += fmt.Sprintf("%s, %s\n", key, value)
@@ -103,6 +103,10 @@ func main() {
 		})
 
 		w.Write([]byte(outString))
+	}))
+
+	http.HandleFunc("/health", instrumentedHandler("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
 	}))
 
 	// Launch web server

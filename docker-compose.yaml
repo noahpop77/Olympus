@@ -53,6 +53,20 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus_data:/prometheus
+  
+  blackbox_exporter:
+    image: prom/blackbox-exporter
+    container_name: blackbox_exporter
+    restart: always
+    depends_on:
+      - prometheus
+    ports:
+      - "9115:9115"
+    volumes:
+      - "./blackbox.yml:/etc/blackbox_exporter/blackbox.yml"
+    command:
+      - "--log.level=error"
+      - "--config.file=/etc/blackbox_exporter/blackbox.yml"
 
   grafana:
     image: grafana/grafana

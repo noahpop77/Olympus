@@ -13,3 +13,21 @@ scrape_configs:
   - job_name: "platform_server"
     static_configs:
       - targets: ["platform_server:8082"]
+
+  - job_name: "blackbox"
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://matchmaking_server:8080/health
+          - http://game_server:8081/health
+          - http://platform_server:8082/health
+          - http://platform_server:8082/databaseHealth
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox_exporter:9115

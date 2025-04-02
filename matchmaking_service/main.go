@@ -145,6 +145,10 @@ func main() {
 		MatchFinder(w, unpackedRequest, rdb, ctx, &partyResourcesMap, matchmakingContext, r, &mu)
 	}))
 
+	http.HandleFunc("/health", instrumentedHandler("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
 	port := ":8080"
 	PrintBanner(port)
 	log.Fatal(http.ListenAndServe(port, nil))
