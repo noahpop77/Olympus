@@ -65,6 +65,8 @@ func UnpackCreationRequest(w http.ResponseWriter, r *http.Request) (*gameServerP
 	var unpackedRequest gameServerProto.MatchCreation
 	err := UnpackRequest(w, r, &unpackedRequest)
 	if err != nil {
+		log.Printf("Could not unpack the payload: %d: %s", http.StatusBadRequest, err)
+		http.Error(w, "Could not unpack the payload", http.StatusBadRequest)
 		return nil, err
 	}
 	return &unpackedRequest, nil
@@ -220,7 +222,7 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 			fmt.Println("Error: Type assertion failed")
 			return
 		}
-		
+
 		// Accesses the sync.map containing the different wait groups that are associated with the matches themselves
 		// Associated with the global service level sync maps in main.go
 		var wg *sync.WaitGroup
@@ -237,7 +239,7 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 
 				wg.Add(1)
 
-				// Main code block related to handling DB interactions 
+				// Main code block related to handling DB interactions
 				// for the match history for each player
 				go func() {
 					defer wg.Done()
@@ -314,7 +316,7 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 					w.Write([]byte(fmt.Sprintf("%s results added to history for %s", unpackedRequest.MatchID, unpackedRequest.RiotName)))
 				}()
 				wg.Wait()
-				
+
 				// Deleting the associated data in the global sync maps
 				//     containing things like match data, match wait group, and other stuff
 				// If this is not deleted the service will just baloon in resource usage
@@ -323,7 +325,7 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 				activeMatches.Delete(match.MatchID)
 				waitGroupMap.Delete(match.MatchID)
 				matchDataMap.Delete(match.MatchID)
-				
+
 				// Success case
 				return
 			}
