@@ -59,17 +59,17 @@ func main() {
 
 	// Simulates looking at your summoner profile
 	// Returns puuid, riotName, riotTag, rank, wins, losses
-	http.HandleFunc("/riotProfile", instrumentedHandler("/matchHistory", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/riotProfile", instrumentedHandler("/riotProfile", func(w http.ResponseWriter, r *http.Request) {
 		RiotProfile(w, r)
 	}))
 
-	http.HandleFunc("/health", instrumentedHandler("/health", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	}))
-
-	http.HandleFunc("/databaseHealth", instrumentedHandler("/databaseHealth", func(w http.ResponseWriter, r *http.Request) {
+	})
+	
+	http.HandleFunc("/databaseHealth", func(w http.ResponseWriter, r *http.Request) {
 		DatabaseHealthCheck(w, r)
-	}))
+	})
 
 	port := ":8082"
 	PrintBanner(port)
