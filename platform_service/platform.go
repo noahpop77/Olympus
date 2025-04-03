@@ -75,7 +75,7 @@ func RiotProfile(w http.ResponseWriter, r *http.Request) {
 	dsn := "postgres://sawa:sawa@postgres:5432/olympus"
 	conn, err := pgx.Connect(context.Background(), dsn)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v\n", err)
+		log.Printf("Unable to connect to database: %v\n", err)
 		http.Error(w, "Unable to connect to the database", http.StatusNotFound)
 		return
 	}
@@ -85,7 +85,7 @@ func RiotProfile(w http.ResponseWriter, r *http.Request) {
 	rows, err := conn.Query(context.Background(),
 		`SELECT puuid, "riotName", "riotTag", rank, wins, losses FROM "summonerRankedInfo" WHERE "puuid" = $1`, unpackedRequest.Puuid)
 	if err != nil {
-		log.Fatalf("Failed to fetch summoner ranked information from DB: %v\n", err)
+		log.Printf("Failed to fetch summoner ranked information from DB: %v\n", err)
 		http.Error(w, "No data found", http.StatusNotFound)
 		return
 	}
@@ -118,7 +118,7 @@ func RiotProfile(w http.ResponseWriter, r *http.Request) {
 
 	data, err := proto.Marshal(response)
 	if err != nil {
-		log.Fatalf("Failed to marshal response: %v\n", err)
+		log.Printf("Failed to marshal response: %v\n", err)
 		http.Error(w, "Failed to marshal response", http.StatusNotFound)
 		return
 	}
@@ -136,7 +136,7 @@ func GetMatchHistory(w http.ResponseWriter, r *http.Request) {
 	dsn := "postgres://sawa:sawa@postgres:5432/olympus"
 	conn, err := pgx.Connect(context.Background(), dsn)
 	if err != nil {
-		log.Fatalf("Unable to connect to database: %v\n", err)
+		log.Printf("Unable to connect to database: %v\n", err)
 	}
 	defer conn.Close(context.Background())
 
@@ -144,7 +144,7 @@ func GetMatchHistory(w http.ResponseWriter, r *http.Request) {
 	rows, err := conn.Query(context.Background(),
 		`SELECT "matchID", "gameVer", "gameDuration", "gameCreationTimestamp", "gameEndTimestamp", "teamOnePUUID", "teamTwoPUUID", "participants" FROM "matchHistory" WHERE "puuid" = $1`, unpackedRequest.PlayerPUUID)
 	if err != nil {
-		log.Fatalf("Failed to fetch match history from DB: %v\n", err)
+		log.Printf("Failed to fetch match history from DB: %v\n", err)
 	}
 	defer rows.Close()
 
@@ -194,7 +194,7 @@ func GetMatchHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rows.Err(); err != nil {
-		log.Fatalf("Error iterating through rows: %v\n", err)
+		log.Printf("Error iterating through rows: %v\n", err)
 	}
 
 	// Prepare the response
@@ -206,7 +206,7 @@ func GetMatchHistory(w http.ResponseWriter, r *http.Request) {
 	// Marshal the response to protobuf format
 	data, err := proto.Marshal(response)
 	if err != nil {
-		log.Fatalf("Failed to marshal response: %v\n", err)
+		log.Printf("Failed to marshal response: %v\n", err)
 	}
 
 	// Send the response back to the client

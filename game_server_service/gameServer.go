@@ -55,6 +55,32 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request, protoMessage proto.Me
 	return nil
 }
 
+func matchHeartBeat(activeMatches, matchCreationDates *sync.Map) {
+	go func() {
+		for {
+			currentTime := time.Now().Unix()
+
+			matchCreationDates.Range(func(key, value interface{}) bool {
+				matchCreationDate, ok := value.(int64)
+				if !ok {
+					return true
+				}
+				// 86400 is the seconds in a day
+				// Every day it checks for for left over artifacts and clears them out.
+				// Should be faster for performances sake, lets say an hour or 2
+				// Take average game time and multiply it by 2 and use that
+				if currentTime-matchCreationDate > 3600 {
+					matchCreationDates.Delete(key)
+					activeMatches.Delete(key)
+				}
+				return true
+			})
+
+			time.Sleep(5 * time.Minute)
+		}
+	}()
+}
+
 /*
 - Unpacks connection requests - Difference from UnpackCreationRequest is
 that Creation request contains a single matchID and all user PUUIDs.

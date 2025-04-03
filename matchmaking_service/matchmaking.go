@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -84,6 +85,30 @@ func UnpackedRequestValidation(unpackedRequest *matchmakingProto.Players) bool {
 	}
 }
 
+func PrintBanner(port string) {
+	fmt.Println(`=================================================
+███╗   ███╗ █████╗ ████████╗ ██████╗██╗  ██╗     
+████╗ ████║██╔══██╗╚══██╔══╝██╔════╝██║  ██║     
+██╔████╔██║███████║   ██║   ██║     ███████║     
+██║╚██╔╝██║██╔══██║   ██║   ██║     ██╔══██║     
+██║ ╚═╝ ██║██║  ██║   ██║   ╚██████╗██║  ██║     
+╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝     
+███╗   ███╗ █████╗ ██╗  ██╗██╗███╗   ██╗ ██████╗ 
+████╗ ████║██╔══██╗██║ ██╔╝██║████╗  ██║██╔════╝ 
+██╔████╔██║███████║█████╔╝ ██║██╔██╗ ██║██║  ███╗
+██║╚██╔╝██║██╔══██║██╔═██╗ ██║██║╚██╗██║██║   ██║
+██║ ╚═╝ ██║██║  ██║██║  ██╗██║██║ ╚████║╚██████╔╝
+╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝`)
+	fmt.Println("=================================================")
+	fmt.Printf("Starting server on port %s...\n", port)
+	fmt.Println("=================================================")
+}
+
+func IsRunningInDocker() bool {
+	_, err := os.Stat("/.dockerenv")
+	return err == nil
+}
+
 // AddPartyToRedis handles party creation and Redis caching for the matchmaking request.
 func AddPartyToRedis(w http.ResponseWriter, unpackedRequest *matchmakingProto.Players, myRank int, rdb *redis.Client, ctx context.Context) {
 
@@ -135,11 +160,10 @@ func ProvisionGameServer(matchData []byte) bool {
 
 // ProcessParty processes a single party by verifying rank constraints and performing an atomic update.
 // If the party is a valid match, it adds its information (including its key) to the matched slice.
-func ProcessParty(ctx context.Context, rdb *redis.Client, unpackedRequest *matchmakingProto.Players, key string, matches *[]matchedParty) error {
+func ProcessParty(ctx context.Context, rdb *redis.Client, unpackedRequest *matchmakingProto.Players, key string, matches *[]matchedParty, conn *pgx.Conn) error {
 
 	tempRank, err := rdb.HGet(ctx, key, "PlayerRank").Result()
 	if err != nil {
-		// log.Printf("failed to hget data for key %s: %v", key, err)
 		return err
 	}
 
@@ -148,21 +172,18 @@ func ProcessParty(ctx context.Context, rdb *redis.Client, unpackedRequest *match
 	}
 
 	teammateRank, _ := strconv.Atoi(tempRank)
-	myRank := int(unpackedRequest.PlayerRank)
-	//////////////////////////////////////////
-	// var myRank int
-	// err = conn.QueryRow(context.Background(),
-	// 	`SELECT rank FROM "summonerRankedInfo" WHERE puuid = $1`, unpackedRequest.PlayerPuuid).
-	// 	Scan(&myRank)
-	// if err == pgx.ErrNoRows{
-	// 	myRank = int(unpackedRequest.PlayerRank)
-	// } else if err != nil && err != pgx.ErrNoRows {
-	// 	log.Fatal("Failed to fetch summoner rank info:", err)
-	// }
-	//////////////////////////////////////////
+	
+	var myRank int
+	err = conn.QueryRow(context.Background(),
+		`SELECT rank FROM "summonerRankedInfo" WHERE puuid = $1`, unpackedRequest.PlayerPuuid).
+		Scan(&myRank)
+	if err == pgx.ErrNoRows{
+		myRank = int(unpackedRequest.PlayerRank)
+	} else if err != nil && err != pgx.ErrNoRows {
+		log.Fatal("Failed to fetch summoner rank info:", err)
+	}
 
 	// Check rank constraints.
-	// log.Printf("%d - %d", myRank, teammateRank)
 	if WithinRankRange(myRank, teammateRank) {
 		hashData, err := rdb.HGetAll(ctx, key).Result()
 		if err != nil {
@@ -179,9 +200,7 @@ func ProcessParty(ctx context.Context, rdb *redis.Client, unpackedRequest *match
 			Puuid:          hashData["PlayerPuuid"],
 			PlayerRank:     hashData["PlayerRank"],
 		})
-		// for _, value := range hashData{
-		// 	log.Printf("%s", value)
-		// }
+
 		return nil
 	}
 
@@ -200,12 +219,12 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *matchmakingPro
 	mu.Lock()
 	defer mu.Unlock()
 
-	// dsn := "postgres://sawa:sawa@postgres:5432/olympus"
-	// conn, err := pgx.Connect(context.Background(), dsn)
-	// if err != nil {
-	// 	log.Fatalf("Unable to connect to database: %v\n", err)
-	// }
-	// defer conn.Close(context.Background())
+	dsn := "postgres://sawa:sawa@postgres:5432/olympus"
+	conn, err := pgx.Connect(context.Background(), dsn)
+	if err != nil {
+		log.Fatalf("Unable to connect to database: %v\n", err)
+	}
+	defer conn.Close(context.Background())
 
 	// Steps through the db 100 keys at a time. Full Scans locks DB.
 	var newCursor uint64
@@ -220,8 +239,8 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *matchmakingPro
 			if len(matchedParties) == 9 {
 				break
 			}
-			err := ProcessParty(ctx, rdb, unpackedRequest, key, &matchedParties)
-			// err := ProcessParty(ctx, rdb, unpackedRequest, key, &matchedParties, conn)
+			
+			err := ProcessParty(ctx, rdb, unpackedRequest, key, &matchedParties, conn)
 			if err == redis.Nil {
 				continue
 			} else if err != nil {
@@ -265,7 +284,7 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *matchmakingPro
 		response.ParticipantsPUUID = append(response.ParticipantsPUUID, matchedParties[i].Puuid)
 	}
 
-	// data, err := json.Marshal(responseRequest)
+
 	data, err := proto.Marshal(response)
 	if err != nil {
 		log.Printf("Failed to marshal responseRequest: %v", err)
@@ -345,13 +364,6 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *matchmakingProto.Player
 		// Notifies client on predefined timer to not eat all compute resources
 		case <-ticker.C:
 
-			// lfgResponse := fmt.Sprintf("Looking for match for %s...\n", unpackedRequest.PlayerRiotName)
-			// _, err := w.Write([]byte(lfgResponse))
-			// if err != nil {
-			// 	return
-			// }
-			// flusher.Flush()
-
 			if MatchmakingSelection(w, unpackedRequest, rdb, ctx, partyResourcesMap, mu) {
 				flusher.Flush()
 				return
@@ -360,4 +372,49 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *matchmakingProto.Player
 
 	}
 
+}
+
+func QueueUp(w http.ResponseWriter, r *http.Request, ctx context.Context, mu *sync.Mutex, partyResourcesMap *sync.Map, rdb *redis.Client){
+	activeConnections.Inc()
+	defer activeConnections.Dec()
+	defer r.Context().Done()
+
+	unpackedRequest := UnpackRequest(w, r)
+	if !UnpackedRequestValidation(unpackedRequest) {
+		http.Error(w, "Missing requried data in payload", http.StatusBadRequest)
+		return
+	}
+
+	dsn := "postgres://sawa:sawa@postgres:5432/olympus"
+	conn, err := pgx.Connect(context.Background(), dsn)
+	if err != nil {
+		log.Printf("Unable to connect to database: %v\n", err)
+		http.Error(w, fmt.Sprintf("Unable to connect to database: %v", err), http.StatusBadRequest)
+		return
+	}
+	defer conn.Close(context.Background())
+
+	// Validates with the summonerRankedInfo database and uses that value for the user if it exists
+	// If not then just use the one provided
+	var myRank int
+	err = conn.QueryRow(context.Background(),
+		`SELECT rank FROM "summonerRankedInfo" WHERE puuid = $1`, unpackedRequest.PlayerPuuid).
+		Scan(&myRank)
+	if err == pgx.ErrNoRows {
+		myRank = int(unpackedRequest.PlayerRank)
+	} else if err != nil && err != pgx.ErrNoRows {
+		log.Printf("Failed to fetch summoner rank info: %v\n", err)
+		http.Error(w, fmt.Sprintf("Failed to fetch summoner rank info: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	AddPartyToRedis(w, unpackedRequest, myRank, rdb, ctx)
+
+	matchmakingContext, cancel := context.WithCancel(context.Background())
+	partyResourcesMap.Store(unpackedRequest.PartyId, PartyResources{
+		CancelFunc: cancel,
+		Writer:     w,
+	})
+
+	MatchFinder(w, unpackedRequest, rdb, ctx, partyResourcesMap, matchmakingContext, r, mu)
 }
