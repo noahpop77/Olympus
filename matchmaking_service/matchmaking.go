@@ -160,7 +160,7 @@ func ProvisionGameServer(matchData []byte) bool {
 
 // ProcessParty processes a single party by verifying rank constraints and performing an atomic update.
 // If the party is a valid match, it adds its information (including its key) to the matched slice.
-func ProcessParty(ctx context.Context, rdb *redis.Client, unpackedRequest *matchmakingProto.Players, key string, matches *[]matchedParty, conn *pgx.Conn) error {
+func ProcessParty(ctx context.Context, rdb *redis.Client, unpackedRequest *matchmakingProto.Players, key string, matches *[]matchedParty, myRank int) error {
 
 	tempRank, err := rdb.HGet(ctx, key, "PlayerRank").Result()
 	if err != nil {
@@ -172,16 +172,6 @@ func ProcessParty(ctx context.Context, rdb *redis.Client, unpackedRequest *match
 	}
 
 	teammateRank, _ := strconv.Atoi(tempRank)
-	
-	var myRank int
-	err = conn.QueryRow(context.Background(),
-		`SELECT rank FROM "summonerRankedInfo" WHERE puuid = $1`, unpackedRequest.PlayerPuuid).
-		Scan(&myRank)
-	if err == pgx.ErrNoRows{
-		myRank = int(unpackedRequest.PlayerRank)
-	} else if err != nil && err != pgx.ErrNoRows {
-		log.Fatal("Failed to fetch summoner rank info:", err)
-	}
 
 	// Check rank constraints.
 	if WithinRankRange(myRank, teammateRank) {
@@ -213,18 +203,11 @@ func ProcessParty(ctx context.Context, rdb *redis.Client, unpackedRequest *match
 
 // MatchmakingSelection concurrently processes all parties to build a matched team.
 // When a team is found (9 matches in addition to the initiating party), the corresponding Redis keys are deleted.
-func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *matchmakingProto.Players, rdb *redis.Client, ctx context.Context, partyResourcesMap *sync.Map, mu *sync.Mutex) bool {
+func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *matchmakingProto.Players, rdb *redis.Client, ctx context.Context, partyResourcesMap *sync.Map, mu *sync.Mutex, myRank int) bool {
 
 	var matchedParties []matchedParty
 	mu.Lock()
 	defer mu.Unlock()
-
-	dsn := "postgres://sawa:sawa@postgres:5432/olympus"
-	conn, err := pgx.Connect(context.Background(), dsn)
-	if err != nil {
-		log.Fatalf("Unable to connect to database: %v\n", err)
-	}
-	defer conn.Close(context.Background())
 
 	// Steps through the db 100 keys at a time. Full Scans locks DB.
 	var newCursor uint64
@@ -240,7 +223,7 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *matchmakingPro
 				break
 			}
 			
-			err := ProcessParty(ctx, rdb, unpackedRequest, key, &matchedParties, conn)
+			err := ProcessParty(ctx, rdb, unpackedRequest, key, &matchedParties, myRank)
 			if err == redis.Nil {
 				continue
 			} else if err != nil {
@@ -338,7 +321,7 @@ func generateMatchID() string {
 	return "MATCH_" + string(id)
 }
 
-func MatchFinder(w http.ResponseWriter, unpackedRequest *matchmakingProto.Players, rdb *redis.Client, ctx context.Context, partyResourcesMap *sync.Map, matchmakingContext context.Context, requester *http.Request, mu *sync.Mutex) {
+func MatchFinder(w http.ResponseWriter, unpackedRequest *matchmakingProto.Players, rdb *redis.Client, ctx context.Context, partyResourcesMap *sync.Map, matchmakingContext context.Context, requester *http.Request, mu *sync.Mutex, myRank int) {
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -364,7 +347,7 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *matchmakingProto.Player
 		// Notifies client on predefined timer to not eat all compute resources
 		case <-ticker.C:
 
-			if MatchmakingSelection(w, unpackedRequest, rdb, ctx, partyResourcesMap, mu) {
+			if MatchmakingSelection(w, unpackedRequest, rdb, ctx, partyResourcesMap, mu, myRank) {
 				flusher.Flush()
 				return
 			}
@@ -416,5 +399,5 @@ func QueueUp(w http.ResponseWriter, r *http.Request, ctx context.Context, mu *sy
 		Writer:     w,
 	})
 
-	MatchFinder(w, unpackedRequest, rdb, ctx, partyResourcesMap, matchmakingContext, r, mu)
+	MatchFinder(w, unpackedRequest, rdb, ctx, partyResourcesMap, matchmakingContext, r, mu, myRank)
 }

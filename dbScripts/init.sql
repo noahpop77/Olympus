@@ -1,3 +1,6 @@
+-- Increase max connections
+ALTER SYSTEM SET max_connections = 10000;
+
 -- Create database if it doesn't exist
 SELECT 'CREATE DATABASE "olympus"'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'olympus')\gexec

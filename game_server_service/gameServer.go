@@ -210,14 +210,14 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 				if len(randomParticipants) != 10 {
 					continue
 				} else {
-					// value, _ := matchDataMap.Load(match.MatchID)
-					// var matchData *gameServerProto.MatchResult
-					// if value != nil {
-					// 	matchData = value.(*gameServerProto.MatchResult)
-					// }
+					value, _ := matchDataMap.Load(match.MatchID)
+					var matchData *gameServerProto.MatchResult
+					if value != nil {
+						matchData = value.(*gameServerProto.MatchResult)
+					}
 
-					// gameDuration, _ := strconv.Atoi(matchData.GameDuration)
-					gameDuration := 1
+					gameDuration, _ := strconv.Atoi(matchData.GameDuration)
+					// gameDuration := 1
 					time.Sleep(time.Duration(gameDuration) * time.Second)
 
 					break
