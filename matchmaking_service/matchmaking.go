@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/noahpop77/Olympus/matchmaking_service/matchmakingProto"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
@@ -357,6 +358,17 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *matchmakingProto.Player
 
 }
 
+var dbPool *pgxpool.Pool
+func initDB() {
+    dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable&pool_max_conns=10000"
+
+    var err error
+    dbPool, err = pgxpool.New(context.Background(), dsn)
+    if err != nil {
+        log.Fatalf("Failed to connect to DB pool: %v", err)
+    }
+}
+
 func QueueUp(w http.ResponseWriter, r *http.Request, ctx context.Context, mu *sync.Mutex, partyResourcesMap *sync.Map, rdb *redis.Client){
 	activeConnections.Inc()
 	defer activeConnections.Dec()
@@ -368,19 +380,19 @@ func QueueUp(w http.ResponseWriter, r *http.Request, ctx context.Context, mu *sy
 		return
 	}
 
-	dsn := "postgres://sawa:sawa@postgres:5432/olympus"
-	conn, err := pgx.Connect(context.Background(), dsn)
-	if err != nil {
-		log.Printf("Unable to connect to database: %v\n", err)
-		http.Error(w, fmt.Sprintf("Unable to connect to database: %v", err), http.StatusBadRequest)
-		return
-	}
-	defer conn.Close(context.Background())
+	// dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable"
+	// conn, err := pgx.Connect(context.Background(), dsn)
+	// if err != nil {
+	// 	log.Printf("Unable to connect to database: %v\n", err)
+	// 	http.Error(w, fmt.Sprintf("Unable to connect to database: %v", err), http.StatusBadRequest)
+	// 	return
+	// }
+	// defer conn.Close(context.Background())
 
 	// Validates with the summonerRankedInfo database and uses that value for the user if it exists
 	// If not then just use the one provided
 	var myRank int
-	err = conn.QueryRow(context.Background(),
+	err := dbPool.QueryRow(context.Background(),
 		`SELECT rank FROM "summonerRankedInfo" WHERE puuid = $1`, unpackedRequest.PlayerPuuid).
 		Scan(&myRank)
 	if err == pgx.ErrNoRows {

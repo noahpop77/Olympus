@@ -16,6 +16,7 @@ func main() {
 	var partyResourcesMap sync.Map
 	ctx := context.Background()
 	var redisAddr string
+	initDB()
 
 	if IsRunningInDocker() {
 		redisAddr = "matchmaking_redis:6379"

@@ -8,7 +8,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/noahpop77/Olympus/platform_service/platformProto"
 	"google.golang.org/protobuf/proto"
 )
@@ -46,17 +46,28 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request, protoMessage proto.Me
 	return nil
 }
 
+var dbPool *pgxpool.Pool
+func initDB() {
+    dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable&pool_max_conns=10000"
+
+    var err error
+    dbPool, err = pgxpool.New(context.Background(), dsn)
+    if err != nil {
+        log.Fatalf("Failed to connect to DB pool: %v", err)
+    }
+}
+
 func DatabaseHealthCheck(w http.ResponseWriter, r *http.Request) {
-	dsn := "postgres://sawa:sawa@postgres:5432/olympus"
-	conn, err := pgx.Connect(context.Background(), dsn)
-	if err != nil {
-		log.Printf("Unable to connect to database: %s\n", err)
-		http.Error(w, fmt.Sprintf("Unable to connect to database: %s", err), http.StatusBadRequest)
-		return
-	}
-	defer conn.Close(context.Background())
+	// dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable"
+	// conn, err := pgx.Connect(context.Background(), dsn)
+	// if err != nil {
+	// 	log.Printf("Unable to connect to database: %s\n", err)
+	// 	http.Error(w, fmt.Sprintf("Unable to connect to database: %s", err), http.StatusBadRequest)
+	// 	return
+	// }
+	// defer conn.Close(context.Background())
 	var result string
-	err = conn.QueryRow(context.Background(), "SELECT 'ok'").Scan(&result)
+	err := dbPool.QueryRow(context.Background(), "SELECT 'ok'").Scan(&result)
 	if err != nil {
 		http.Error(w, "Database query failed", http.StatusInternalServerError)
 		return
@@ -72,17 +83,17 @@ func RiotProfile(w http.ResponseWriter, r *http.Request) {
 
 	// Connect to postgres database
 	// TODO: Make it not hardcoded at some point
-	dsn := "postgres://sawa:sawa@postgres:5432/olympus"
-	conn, err := pgx.Connect(context.Background(), dsn)
-	if err != nil {
-		log.Printf("Unable to connect to database: %v\n", err)
-		http.Error(w, "Unable to connect to the database", http.StatusNotFound)
-		return
-	}
-	defer conn.Close(context.Background())
+	// dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable"
+	// conn, err := pgx.Connect(context.Background(), dsn)
+	// if err != nil {
+	// 	log.Printf("Unable to connect to database: %v\n", err)
+	// 	http.Error(w, "Unable to connect to the database", http.StatusNotFound)
+	// 	return
+	// }
+	// defer conn.Close(context.Background())
 
 	// Gets the single row containing the account information, nothing else
-	rows, err := conn.Query(context.Background(),
+	rows, err := dbPool.Query(context.Background(),
 		`SELECT puuid, "riotName", "riotTag", rank, wins, losses FROM "summonerRankedInfo" WHERE "puuid" = $1`, unpackedRequest.Puuid)
 	if err != nil {
 		log.Printf("Failed to fetch summoner ranked information from DB: %v\n", err)
@@ -133,15 +144,15 @@ func GetMatchHistory(w http.ResponseWriter, r *http.Request) {
 
 	// Connect to postgres database
 	// TODO: Make it not hardcoded at some point
-	dsn := "postgres://sawa:sawa@postgres:5432/olympus"
-	conn, err := pgx.Connect(context.Background(), dsn)
-	if err != nil {
-		log.Printf("Unable to connect to database: %v\n", err)
-	}
-	defer conn.Close(context.Background())
+	// dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable"
+	// conn, err := pgx.Connect(context.Background(), dsn)
+	// if err != nil {
+	// 	log.Printf("Unable to connect to database: %v\n", err)
+	// }
+	// defer conn.Close(context.Background())
 
 	// Actual query sent to postgres
-	rows, err := conn.Query(context.Background(),
+	rows, err := dbPool.Query(context.Background(),
 		`SELECT "matchID", "gameVer", "gameDuration", "gameCreationTimestamp", "gameEndTimestamp", "teamOnePUUID", "teamTwoPUUID", "participants" FROM "matchHistory" WHERE "puuid" = $1`, unpackedRequest.PlayerPUUID)
 	if err != nil {
 		log.Printf("Failed to fetch match history from DB: %v\n", err)

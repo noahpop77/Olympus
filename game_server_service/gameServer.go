@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/noahpop77/Olympus/game_server_service/gameServerProto"
 	"google.golang.org/protobuf/proto"
 )
@@ -113,7 +114,7 @@ func UnpackConnectionRequest(w http.ResponseWriter, r *http.Request) (*gameServe
 	return &unpackedRequest, nil
 }
 
-func UpdateProfile(conn *pgx.Conn, unpackedRequest *gameServerProto.MatchConnection, randomMatch *gameServerProto.MatchResult) error {
+func UpdateProfile(dbPool *pgxpool.Pool, unpackedRequest *gameServerProto.MatchConnection, randomMatch *gameServerProto.MatchResult) error {
 
 	var myTeam string
 	for _, value := range randomMatch.TeamOnePUUID {
@@ -132,7 +133,7 @@ func UpdateProfile(conn *pgx.Conn, unpackedRequest *gameServerProto.MatchConnect
 	unpackedRank, _ := strconv.Atoi(unpackedRequest.Rank)
 
 	var rank, wins, losses int
-	err := conn.QueryRow(context.Background(),
+	err := dbPool.QueryRow(context.Background(),
 		`SELECT rank, wins, losses FROM "summonerRankedInfo" WHERE puuid = $1`, unpackedRequest.ParticipantPUUID).
 		Scan(&rank, &wins, &losses)
 	if err == pgx.ErrNoRows {
@@ -157,7 +158,7 @@ func UpdateProfile(conn *pgx.Conn, unpackedRequest *gameServerProto.MatchConnect
 		losses++
 	}
 
-	_, err = conn.Exec(context.Background(),
+	_, err = dbPool.Exec(context.Background(),
 		`INSERT INTO "summonerRankedInfo" 
 		("puuid", "riotName", "riotTag", "rank", "wins", "losses") 
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -230,6 +231,17 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 	}
 }
 
+var dbPool *pgxpool.Pool
+func initDB() {
+    dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable&pool_max_conns=10000"
+
+    var err error
+    dbPool, err = pgxpool.New(context.Background(), dsn)
+    if err != nil {
+        log.Fatalf("Failed to connect to DB pool: %v", err)
+    }
+}
+
 // Endpoint that users will use to connect to the marked matches in the sync.Map
 // Consumed by the /connectToMatch endpoint
 func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *sync.Map, matchDataMap *sync.Map, matchParticipantsMap *sync.Map, databaseTransactionMutex *sync.Mutex, waitGroupMap *sync.Map) {
@@ -276,21 +288,35 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 						return
 					}
 
-					// Postgres container connection
-					dsn := "postgres://sawa:sawa@postgres:5432/olympus"
-					conn, err := pgx.Connect(context.Background(), dsn)
-					if err != nil {
-						log.Printf("Unable to connect to database: %s\n", err)
-						http.Error(w, fmt.Sprintf("Unable to connect to database: %s", err), http.StatusBadRequest)
+					// // Postgres container connection
+					// dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable"
+					// conn, err := pgx.Connect(context.Background(), dsn)
+					// if err != nil {
+					// 	log.Printf("Unable to connect to database: %s\n", err)
+					// 	http.Error(w, fmt.Sprintf("Unable to connect to database: %s", err), http.StatusBadRequest)
+					// 	return
+					// }
+					// defer conn.Close(context.Background())
+
+					// value, _ := matchDataMap.Load(match.MatchID)
+					// var randomMatch *gameServerProto.MatchResult
+					// if value != nil {
+					// 	randomMatch = value.(*gameServerProto.MatchResult)
+					// }
+
+					value, ok := matchDataMap.Load(match.MatchID)
+					if !ok {
+						log.Printf("No match data found for matchID: %s", match.MatchID)
+						http.Error(w, "Match data not found", http.StatusInternalServerError)
 						return
 					}
-					defer conn.Close(context.Background())
-
-					value, _ := matchDataMap.Load(match.MatchID)
-					var randomMatch *gameServerProto.MatchResult
-					if value != nil {
-						randomMatch = value.(*gameServerProto.MatchResult)
+					randomMatch, ok := value.(*gameServerProto.MatchResult)
+					if !ok || randomMatch == nil {
+						log.Printf("Failed to cast match data for matchID: %s", match.MatchID)
+						http.Error(w, "Match data invalid", http.StatusInternalServerError)
+						return
 					}
+
 
 					participantValue, _ := matchParticipantsMap.Load(match.MatchID)
 					var randomParticipants []*gameServerProto.Participant
@@ -317,16 +343,16 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 					participants := participantJsonData
 
 					databaseTransactionMutex.Lock()
-					err = UpdateProfile(conn, unpackedRequest, randomMatch)
+					err = UpdateProfile(dbPool, unpackedRequest, randomMatch)
 					if err != nil {
 						log.Printf("Could not update summoner data in database: %s\n", err)
 						http.Error(w, fmt.Sprintf("Could not update summoner data in database: %s", err), http.StatusBadRequest)
 						return
 					}
 					databaseTransactionMutex.Unlock()
-
+					
 					// Execute INSERT query
-					_, err = conn.Exec(context.Background(),
+					_, err = dbPool.Exec(context.Background(),
 						`INSERT INTO "matchHistory" 
 						("matchID", "gameVer", "puuid", "gameDuration", "gameCreationTimestamp", "gameEndTimestamp", "teamOnePUUID", "teamTwoPUUID", "participants") 
 						VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,

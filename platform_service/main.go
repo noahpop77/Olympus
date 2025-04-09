@@ -14,6 +14,7 @@ import (
 */
 
 func main() {
+	initDB()
 	http.Handle("/metrics", promhttp.Handler())
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

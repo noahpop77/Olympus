@@ -31,6 +31,8 @@ func main() {
 
 	var databaseTransactionMutex sync.Mutex
 
+	initDB()
+
 	matchHeartBeat(&activeMatches, &matchCreationDates)
 
 	// Endpoint used to expose prometheus metrics
