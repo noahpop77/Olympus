@@ -257,7 +257,7 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 	if ok {
 		match, valid := validateSyncStore.(*gameServerProto.MatchCreation)
 		if !valid {
-			fmt.Println("Error: Type assertion failed")
+			log.Printf("Error: Type assertion failed")
 			return
 		}
 
@@ -306,7 +306,7 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 
 					value, ok := matchDataMap.Load(match.MatchID)
 					if !ok {
-						log.Printf("No match data found for matchID: %s", match.MatchID)
+						log.Printf("No match data found for matchID: %s, %+v", match.MatchID, match)
 						http.Error(w, "Match data not found", http.StatusInternalServerError)
 						return
 					}
