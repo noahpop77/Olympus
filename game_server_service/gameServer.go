@@ -56,31 +56,31 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request, protoMessage proto.Me
 	return nil
 }
 
-func matchHeartBeat(activeMatches, matchCreationDates *sync.Map) {
-	go func() {
-		for {
-			currentTime := time.Now().Unix()
+// func matchHeartBeat(activeMatches, matchCreationDates *sync.Map) {
+// 	go func() {
+// 		for {
+// 			currentTime := time.Now().Unix()
 
-			matchCreationDates.Range(func(key, value interface{}) bool {
-				matchCreationDate, ok := value.(int64)
-				if !ok {
-					return true
-				}
-				// 86400 is the seconds in a day
-				// Every day it checks for for left over artifacts and clears them out.
-				// Should be faster for performances sake, lets say an hour or 2
-				// Take average game time and multiply it by 2 and use that
-				if currentTime-matchCreationDate > 3600 {
-					matchCreationDates.Delete(key)
-					activeMatches.Delete(key)
-				}
-				return true
-			})
+// 			matchCreationDates.Range(func(key, value interface{}) bool {
+// 				matchCreationDate, ok := value.(int64)
+// 				if !ok {
+// 					return true
+// 				}
+// 				// 86400 is the seconds in a day
+// 				// Every day it checks for for left over artifacts and clears them out.
+// 				// Should be faster for performances sake, lets say an hour or 2
+// 				// Take average game time and multiply it by 2 and use that
+// 				if currentTime-matchCreationDate > 3600 {
+// 					matchCreationDates.Delete(key)
+// 					activeMatches.Delete(key)
+// 				}
+// 				return true
+// 			})
 
-			time.Sleep(5 * time.Minute)
-		}
-	}()
-}
+// 			time.Sleep(5 * time.Minute)
+// 		}
+// 	}()
+// }
 
 /*
 - Unpacks connection requests - Difference from UnpackCreationRequest is
@@ -211,14 +211,14 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 				if len(randomParticipants) != 10 {
 					continue
 				} else {
-					value, _ := matchDataMap.Load(match.MatchID)
-					var matchData *gameServerProto.MatchResult
-					if value != nil {
-						matchData = value.(*gameServerProto.MatchResult)
-					}
+					// value, _ := matchDataMap.Load(match.MatchID)
+					// var matchData *gameServerProto.MatchResult
+					// if value != nil {
+					// 	matchData = value.(*gameServerProto.MatchResult)
+					// }
 
-					gameDuration, _ := strconv.Atoi(matchData.GameDuration)
-					// gameDuration := 1
+					// gameDuration, _ := strconv.Atoi(matchData.GameDuration)
+					gameDuration := 1
 					time.Sleep(time.Duration(gameDuration) * time.Second)
 
 					break
@@ -232,14 +232,15 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 }
 
 var dbPool *pgxpool.Pool
-func initDB() {
-    dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable&pool_max_conns=10000"
 
-    var err error
-    dbPool, err = pgxpool.New(context.Background(), dsn)
-    if err != nil {
-        log.Fatalf("Failed to connect to DB pool: %v", err)
-    }
+func initDB() {
+	dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable&pool_max_conns=10000"
+
+	var err error
+	dbPool, err = pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		log.Fatalf("Failed to connect to DB pool: %v", err)
+	}
 }
 
 // Endpoint that users will use to connect to the marked matches in the sync.Map
@@ -288,35 +289,20 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 						return
 					}
 
-					// // Postgres container connection
-					// dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable"
-					// conn, err := pgx.Connect(context.Background(), dsn)
-					// if err != nil {
-					// 	log.Printf("Unable to connect to database: %s\n", err)
-					// 	http.Error(w, fmt.Sprintf("Unable to connect to database: %s", err), http.StatusBadRequest)
-					// 	return
-					// }
-					// defer conn.Close(context.Background())
-
-					// value, _ := matchDataMap.Load(match.MatchID)
-					// var randomMatch *gameServerProto.MatchResult
-					// if value != nil {
-					// 	randomMatch = value.(*gameServerProto.MatchResult)
-					// }
-
+					var randomMatch *gameServerProto.MatchResult
 					value, ok := matchDataMap.Load(match.MatchID)
 					if !ok {
-						log.Printf("No match data found for matchID: %s, %+v", match.MatchID, match)
+						log.Printf("No match data found for matchID: %s, %+v", match.MatchID, match) // returns nil for value
 						http.Error(w, "Match data not found", http.StatusInternalServerError)
 						return
+					} else {
+						randomMatch, ok = value.(*gameServerProto.MatchResult)
+						if !ok {
+							log.Printf("Failed to cast match data for matchID: %s", match.MatchID)
+							http.Error(w, "Match data invalid", http.StatusInternalServerError)
+							return
+						}
 					}
-					randomMatch, ok := value.(*gameServerProto.MatchResult)
-					if !ok || randomMatch == nil {
-						log.Printf("Failed to cast match data for matchID: %s", match.MatchID)
-						http.Error(w, "Match data invalid", http.StatusInternalServerError)
-						return
-					}
-
 
 					participantValue, _ := matchParticipantsMap.Load(match.MatchID)
 					var randomParticipants []*gameServerProto.Participant
@@ -343,14 +329,14 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 					participants := participantJsonData
 
 					databaseTransactionMutex.Lock()
-					err = UpdateProfile(dbPool, unpackedRequest, randomMatch)
+					err = UpdateProfile(dbPool, unpackedRequest, randomMatch) // TODO: Profile not getting updated cause of No match data found for matchID erroring
 					if err != nil {
 						log.Printf("Could not update summoner data in database: %s\n", err)
 						http.Error(w, fmt.Sprintf("Could not update summoner data in database: %s", err), http.StatusBadRequest)
 						return
 					}
 					databaseTransactionMutex.Unlock()
-					
+
 					// Execute INSERT query
 					_, err = dbPool.Exec(context.Background(),
 						`INSERT INTO "matchHistory" 
@@ -373,10 +359,12 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 				//     containing things like match data, match wait group, and other stuff
 				// If this is not deleted the service will just baloon in resource usage
 				// 	    the more matches are run through it
-				matchParticipantsMap.Delete(match.MatchID)
-				activeMatches.Delete(match.MatchID)
-				waitGroupMap.Delete(match.MatchID)
-				matchDataMap.Delete(match.MatchID)
+
+				// TODO: I think that since some goroutines are finishing sooner than others or erroring out faster than outhers its causing premature deletes
+				// matchParticipantsMap.Delete(match.MatchID)
+				// activeMatches.Delete(match.MatchID)
+				// waitGroupMap.Delete(match.MatchID)
+				// matchDataMap.Delete(match.MatchID)
 
 				// Success case
 				return

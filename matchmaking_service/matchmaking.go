@@ -223,7 +223,7 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *matchmakingPro
 			if len(matchedParties) == 9 {
 				break
 			}
-			
+
 			err := ProcessParty(ctx, rdb, unpackedRequest, key, &matchedParties, myRank)
 			if err == redis.Nil {
 				continue
@@ -268,14 +268,13 @@ func MatchmakingSelection(w http.ResponseWriter, unpackedRequest *matchmakingPro
 		response.ParticipantsPUUID = append(response.ParticipantsPUUID, matchedParties[i].Puuid)
 	}
 
-
 	data, err := proto.Marshal(response)
 	if err != nil {
 		log.Printf("Failed to marshal responseRequest: %v", err)
 		return false
 	}
 
-	if ProvisionGameServer(data) {
+	if ProvisionGameServer(data) { // TODO: INSPECT THIS FOR THE SPAWN MATCH ERROR
 		w.Header().Set("Content-Type", "application/x-protobuf")
 		w.Write([]byte(data))
 
@@ -326,6 +325,7 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *matchmakingProto.Player
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
+		log.Printf("Streaming not supported - %d", http.StatusInternalServerError)
 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
@@ -359,35 +359,28 @@ func MatchFinder(w http.ResponseWriter, unpackedRequest *matchmakingProto.Player
 }
 
 var dbPool *pgxpool.Pool
-func initDB() {
-    dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable&pool_max_conns=10000"
 
-    var err error
-    dbPool, err = pgxpool.New(context.Background(), dsn)
-    if err != nil {
-        log.Fatalf("Failed to connect to DB pool: %v", err)
-    }
+func initDB() {
+	dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable&pool_max_conns=10000"
+
+	var err error
+	dbPool, err = pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		log.Fatalf("Failed to connect to DB pool: %v", err)
+	}
 }
 
-func QueueUp(w http.ResponseWriter, r *http.Request, ctx context.Context, mu *sync.Mutex, partyResourcesMap *sync.Map, rdb *redis.Client){
+func QueueUp(w http.ResponseWriter, r *http.Request, ctx context.Context, mu *sync.Mutex, partyResourcesMap *sync.Map, rdb *redis.Client) {
 	activeConnections.Inc()
-	defer activeConnections.Dec()
+	// defer activeConnections.Dec()
 	defer r.Context().Done()
 
 	unpackedRequest := UnpackRequest(w, r)
 	if !UnpackedRequestValidation(unpackedRequest) {
+		log.Printf("Missing requried data in payload - %d", http.StatusBadRequest)
 		http.Error(w, "Missing requried data in payload", http.StatusBadRequest)
 		return
 	}
-
-	// dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable"
-	// conn, err := pgx.Connect(context.Background(), dsn)
-	// if err != nil {
-	// 	log.Printf("Unable to connect to database: %v\n", err)
-	// 	http.Error(w, fmt.Sprintf("Unable to connect to database: %v", err), http.StatusBadRequest)
-	// 	return
-	// }
-	// defer conn.Close(context.Background())
 
 	// Validates with the summonerRankedInfo database and uses that value for the user if it exists
 	// If not then just use the one provided

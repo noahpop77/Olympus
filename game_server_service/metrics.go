@@ -32,6 +32,13 @@ var (
 			Help: "Number of players currently connected to /connectToMatch",
 		},
 	)
+
+	matchesSpawned = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "matches_spawned",
+			Help: "Number of matches spawned with /spawnMatch",
+		},
+	)
 )
 
 // Middleware for Prometheus metrics
@@ -47,5 +54,5 @@ func instrumentedHandler(endpoint string, handler func(http.ResponseWriter, *htt
 }
 
 func init() {
-	prometheus.MustRegister(requestsTotal, requestDuration, activeConnections)
+	prometheus.MustRegister(requestsTotal, requestDuration, activeConnections, matchesSpawned)
 }

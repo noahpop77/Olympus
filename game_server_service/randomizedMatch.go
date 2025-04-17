@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -15,13 +16,14 @@ import (
 /*
 Sets the shared match data in the sync.map for the given match for all 10 participants
 */
-func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUnixTime int64, TeamOnePUUIDStruct []string, TeamTwoPUUIDStruct []string, rng *rand.Rand) {
+func generateRandomMatchData(matchID string, matchDataMap *sync.Map, gameEndUnixTime int64, TeamOnePUUIDStruct []string, TeamTwoPUUIDStruct []string, rng *rand.Rand) {
 
 	var participants *gameServerProto.MatchResult
-	value, _ := activeMatches.Load(matchID)
+	value, _ := matchDataMap.Load(matchID)
 	if value != nil {
 		participants = value.(*gameServerProto.MatchResult)
 	} else {
+		log.Printf("participants = &gameServerProto.MatchResult{}")
 		participants = &gameServerProto.MatchResult{}
 	}
 
@@ -34,6 +36,7 @@ func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUni
 
 	randomDuration := rng.Intn(300) + 60
 
+	log.Printf("participants.MatchID: %s", participants.MatchID)
 	if participants.MatchID == "" {
 		participants.MatchID = matchID
 		participants.GameVersion = "14.21.630.3012"
@@ -44,7 +47,7 @@ func generateRandomMatchData(matchID string, activeMatches *sync.Map, gameEndUni
 		participants.TeamTwoPUUID = TeamTwoPUUIDStruct
 		participants.Winners = winners
 
-		activeMatches.Store(matchID, participants)
+		matchDataMap.Store(matchID, participants)
 		return
 	} else if participants.MatchID[:6] != "MATCH_" || len(participants.MatchID) < 7 {
 		fmt.Printf("Has other data: %s\n", participants.MatchID)

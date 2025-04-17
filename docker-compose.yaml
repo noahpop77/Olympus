@@ -28,6 +28,7 @@ services:
     restart: always
     ports:
       - "8081:8081"
+    cpuset: "0,1,2,3"
   
   platform_server:
     build:
@@ -37,6 +38,7 @@ services:
     restart: always
     ports:
       - "8082:8082"
+    cpuset: "0,1,2,3"
     
   prometheus:
     image: prom/prometheus
@@ -53,6 +55,7 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus_data:/prometheus
+    cpuset: "0,1,2,3"
   
   blackbox_exporter:
     image: prom/blackbox-exporter
@@ -67,6 +70,7 @@ services:
     command:
       - "--log.level=error"
       - "--config.file=/etc/blackbox_exporter/blackbox.yml"
+    cpuset: "0,1,2,3"
 
   grafana:
     image: grafana/grafana
@@ -79,6 +83,7 @@ services:
     - GF_LOG_LEVEL=error
     volumes:
       - ./grafana_data:/var/lib/grafana
+    cpuset: "0,1,2,3"
 
   postgres:
     image: postgres:latest
@@ -93,7 +98,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./dbScripts/init.sql:/docker-entrypoint-initdb.d/init.sql
-    
+    cpuset: "0,1,2,3"
+      
 volumes:
   prometheus_data:
   grafana_data:

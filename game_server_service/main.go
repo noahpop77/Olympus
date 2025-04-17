@@ -33,7 +33,7 @@ func main() {
 
 	initDB()
 
-	matchHeartBeat(&activeMatches, &matchCreationDates)
+	// matchHeartBeat(&activeMatches, &matchCreationDates)
 
 	// Endpoint used to expose prometheus metrics
 	http.Handle("/metrics", promhttp.Handler())
@@ -41,9 +41,11 @@ func main() {
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	
+
 	http.HandleFunc("/spawnMatch", instrumentedHandler("/spawnMatch", func(w http.ResponseWriter, r *http.Request) {
 		unpackedRequest, _ := UnpackCreationRequest(w, r)
+		matchesSpawned.Inc()
+
 		activeMatches.Store(unpackedRequest.MatchID, unpackedRequest)
 		matchCreationDates.Store(unpackedRequest.MatchID, time.Now().Unix())
 	}))
@@ -54,7 +56,6 @@ func main() {
 
 		NewPlayerConnection(w, r, &activeMatches, &matchDataMap, &matchParticipantsMap, &databaseTransactionMutex, &waitGroupMap)
 	}))
-	
 
 	// DEBUG PURPOSES ONLY: Test function for inspecting sync maps
 	http.HandleFunc("/activeMatches", instrumentedHandler("/activeMatches", func(w http.ResponseWriter, r *http.Request) {
@@ -84,11 +85,10 @@ func main() {
 			return true
 		})
 
-		log.Printf("%s", outString)
+		// log.Printf("%s", outString)
 
 		w.Write([]byte(outString))
 	}))
-
 
 	// Launch web server
 	port := ":8081"

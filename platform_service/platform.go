@@ -47,14 +47,15 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request, protoMessage proto.Me
 }
 
 var dbPool *pgxpool.Pool
-func initDB() {
-    dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable&pool_max_conns=10000"
 
-    var err error
-    dbPool, err = pgxpool.New(context.Background(), dsn)
-    if err != nil {
-        log.Fatalf("Failed to connect to DB pool: %v", err)
-    }
+func initDB() {
+	dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable&pool_max_conns=10000"
+
+	var err error
+	dbPool, err = pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		log.Fatalf("Failed to connect to DB pool: %v", err)
+	}
 }
 
 func DatabaseHealthCheck(w http.ResponseWriter, r *http.Request) {
@@ -81,17 +82,6 @@ func RiotProfile(w http.ResponseWriter, r *http.Request) {
 	var unpackedRequest platformProto.UserProfile
 	UnpackRequest(w, r, &unpackedRequest)
 
-	// Connect to postgres database
-	// TODO: Make it not hardcoded at some point
-	// dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable"
-	// conn, err := pgx.Connect(context.Background(), dsn)
-	// if err != nil {
-	// 	log.Printf("Unable to connect to database: %v\n", err)
-	// 	http.Error(w, "Unable to connect to the database", http.StatusNotFound)
-	// 	return
-	// }
-	// defer conn.Close(context.Background())
-
 	// Gets the single row containing the account information, nothing else
 	rows, err := dbPool.Query(context.Background(),
 		`SELECT puuid, "riotName", "riotTag", rank, wins, losses FROM "summonerRankedInfo" WHERE "puuid" = $1`, unpackedRequest.Puuid)
@@ -102,7 +92,7 @@ func RiotProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	// Places the cursor on the 
+	// Places the cursor on the
 	if !rows.Next() {
 		log.Printf("No match found for PUUID: %s\n", unpackedRequest.Puuid)
 		http.Error(w, "No data found", http.StatusNotFound)
