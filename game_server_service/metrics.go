@@ -45,6 +45,17 @@ var (
 func instrumentedHandler(endpoint string, handler func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+
+		// defer func() {
+		// 	if err := recover(); err != nil {
+		// 		log.Printf("Panic in %s: %v\n%s", endpoint, err, debug.Stack())
+		// 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		// 	}
+		// 	duration := time.Since(start).Seconds()
+		// 	requestsTotal.WithLabelValues(endpoint).Inc()
+		// 	requestDuration.WithLabelValues(endpoint).Observe(duration)
+		// }()
+
 		handler(w, r)
 		duration := time.Since(start).Seconds()
 
