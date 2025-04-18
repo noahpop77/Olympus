@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -23,7 +22,7 @@ func generateRandomMatchData(matchID string, matchDataMap *sync.Map, gameEndUnix
 	if value != nil {
 		participants = value.(*gameServerProto.MatchResult)
 	} else {
-		log.Printf("participants = &gameServerProto.MatchResult{}")
+		// log.Printf("participants = &gameServerProto.MatchResult{}")
 		participants = &gameServerProto.MatchResult{}
 	}
 
@@ -36,7 +35,7 @@ func generateRandomMatchData(matchID string, matchDataMap *sync.Map, gameEndUnix
 
 	randomDuration := rng.Intn(300) + 60
 
-	log.Printf("participants.MatchID: %s", participants.MatchID)
+	// log.Printf("participants.MatchID: %s", participants.MatchID)
 	if participants.MatchID == "" {
 		participants.MatchID = matchID
 		participants.GameVersion = "14.21.630.3012"

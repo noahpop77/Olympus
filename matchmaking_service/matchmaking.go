@@ -372,7 +372,7 @@ func initDB() {
 
 func QueueUp(w http.ResponseWriter, r *http.Request, ctx context.Context, mu *sync.Mutex, partyResourcesMap *sync.Map, rdb *redis.Client) {
 	activeConnections.Inc()
-	// defer activeConnections.Dec()
+	defer activeConnections.Dec()
 	defer r.Context().Done()
 
 	unpackedRequest := UnpackRequest(w, r)
