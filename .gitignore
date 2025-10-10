@@ -2,4 +2,6 @@ archive
 *.rdb
 .vscode
 prometheus_data/*
+!prometheus_data/readme.md
 grafana_data/*
+!grafana_data/readme.md
