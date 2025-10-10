@@ -1,4 +1,5 @@
 archive
 *.rdb
 .vscode
-prometheus_data
+prometheus_data/*
+grafana_data/*
