@@ -1,5 +1,5 @@
 -- Increase max connections
-ALTER SYSTEM SET max_connections = 100000;
+ALTER SYSTEM SET max_connections = 100;
 
 -- Create database if it doesn't exist
 SELECT 'CREATE DATABASE "olympus"'

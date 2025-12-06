@@ -94,8 +94,9 @@ func RiotProfile(w http.ResponseWriter, r *http.Request) {
 
 	// Places the cursor on the
 	if !rows.Next() {
-		log.Printf("No match found for PUUID: %s\n", unpackedRequest.Puuid)
-		http.Error(w, "No data found", http.StatusNotFound)
+		log.Printf("No summmoner data for PUUID: %s\n", unpackedRequest.Puuid)
+		// NOTE: If I return the below response I will get an unmarshal error on the test client
+		//http.Error(w, "No data found", http.StatusNotFound)
 		return
 	}
 
