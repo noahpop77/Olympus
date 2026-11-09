@@ -42,7 +42,9 @@ func generateRandomMatchData(matchID string, matchDataMap *sync.Map, gameEndUnix
 		winners = "two"
 	}
 
-	randomDuration := rng.Intn(300) + 60
+	// Every simulated game lasts exactly simulatedGameDuration so the match
+	// timestamps line up with the server-side sleep and the client's wait.
+	randomDuration := int(simulatedGameDuration / time.Second)
 
 	// log.Printf("participants.MatchID: %s", participants.MatchID)
 	if participants.MatchID == "" {
@@ -73,7 +75,9 @@ func generateGameData(match *gameServerProto.MatchCreation, matchParticipantsMap
 
 	// Building blocks for data fields
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	gameEndUnixTime := time.Now().Unix()
+	// The game starts now and ends simulatedGameDuration later, which is when
+	// the result is actually written to the database.
+	gameEndUnixTime := time.Now().Add(simulatedGameDuration).Unix()
 	itemIDs := getRandomItems(7)
 	teamWin := (rng.Intn(2) == 0)
 	var TeamOnePUUIDStruct []string

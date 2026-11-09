@@ -24,6 +24,12 @@ const (
 	// other participants to show up. Without this the old loops spun forever
 	// whenever a match never filled up, leaking a goroutine per player.
 	matchConnectTimeout = 2 * time.Minute
+	// simulatedGameDuration is how long a simulated match lasts. The client
+	// sleeps for the same duration (plus a buffer) before reading the result.
+	simulatedGameDuration = 300 * time.Second
+	// matchCleanupGrace is added to the watchdog once a match is full so the
+	// maps survive the whole game plus the database writes that follow it.
+	matchCleanupGrace = 2 * time.Minute
 	// dbOpTimeout bounds every database round trip.
 	dbOpTimeout = 5 * time.Second
 	// participantPoll is how often a player checks whether all participants
@@ -222,8 +228,10 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 				return fmt.Errorf("invalid participant data for match ID %s", match.MatchID)
 			}
 			if len(randomParticipants) >= matchSize {
-				// Simulate the game taking a short amount of time.
-				time.Sleep(250 * time.Millisecond)
+				// Simulate the full game duration. The client sleeps for the
+				// same amount of time before it asks for the match result, so
+				// this must stay in sync with simulatedGameDuration.
+				time.Sleep(simulatedGameDuration)
 				return nil
 			}
 		}
@@ -488,6 +496,10 @@ func (t *matchTracker) arrive(puuid string) (isLast bool, duplicate bool) {
 	t.wg.Add(1)
 	t.arrived++
 	if t.arrived == t.expected {
+		// The match is full, so the connect window is over. Extend the
+		// watchdog to cover the simulated game and the database writes
+		// instead of deleting the match two minutes after it started.
+		t.timer.Reset(simulatedGameDuration + matchCleanupGrace)
 		t.doneOnce.Do(func() { close(t.done) })
 		return true, false
 	}
@@ -578,7 +590,12 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 		return
 	}
 
+	// Count the player for the whole match lifetime, not just for the HTTP
+	// handler. The handler returns as soon as the player is registered, so
+	// incrementing the gauge in main.go made "Players In Game" read ~0.
+	activeConnections.Inc()
 	go func() {
+		defer activeConnections.Dec()
 		defer tracker.wg.Done()
 		defer func() {
 			if rec := recover(); rec != nil {

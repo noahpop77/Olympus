@@ -1874,6 +1874,376 @@ reads, not a bitmap scan over the player's entire history.
   `init.sql` only runs when the volume is first created; it will recreate the index
   automatically on a fresh volume.
 
+## 19. Follow-up — 300-second games and the "Players In Game" gauge
+
+Two related changes were made after the 10k run: the simulated game was lengthened
+to **300 seconds**, and the `game_server_queueup_active_players` gauge was moved off
+the short-lived HTTP handler. They are described together because they only make
+sense as a pair.
+
+### 19.1 Why the gauge read 0
+
+`/connectToMatch` used to increment the gauge around the HTTP handler:
+
+```go
+http.HandleFunc("/connectToMatch", ... {
+    activeConnections.Inc()
+    defer activeConnections.Dec()
+    NewPlayerConnection(...)
+})
+```
+
+`NewPlayerConnection` registers the player and returns immediately; the match work
+happens in a background goroutine. The gauge was therefore non-zero for only a few
+milliseconds, while Prometheus scrapes every 15 seconds. It almost always sampled
+`0` even though `game_server_api_requests_total{endpoint="/connectToMatch"}` was in
+the millions.
+
+**Fix:** increment/decrement inside the per-player match goroutine in
+`NewPlayerConnection` (`gameServer.go`). A player is now counted from registration
+until its match work (game + database writes) finishes.
+
+### 19.2 The 300-second game
+
+The game server used to simulate a **250 ms** game while the client slept **5–6 s**.
+The two were unrelated, so the gauge could never reflect the client's game and a
+long server-side sleep on its own would have been unsafe. Three timing rules now
+line up:
+
+| Phase | Duration | Where |
+|---|---|---|
+| Wait for all 10 participants | up to 2 min (`matchConnectTimeout`) | `ConnectPlayerToMatch` |
+| Simulated game | 300 s (`simulatedGameDuration`) | `ConnectPlayerToMatch` |
+| Result written to Postgres | immediately after the game | `NewPlayerConnection` goroutine |
+| Client waits before reading | 300 s + 15 s (`postGameBuffer`) | `runPlayerCycle` |
+
+Files changed:
+
+- `game_server_service/gameServer.go`
+  - added `simulatedGameDuration = 300 * time.Second`
+  - added `matchCleanupGrace = 2 * time.Minute`
+  - replaced the `250 * time.Millisecond` game sleep with `simulatedGameDuration`
+  - when the match becomes full, `matchTracker.arrive` resets the watchdog from
+    `matchConnectTimeout` to `simulatedGameDuration + matchCleanupGrace`
+- `game_server_service/randomizedMatch.go`
+  - `GameDuration` is now exactly `simulatedGameDuration` (300 s) instead of a
+    random 60–359 s
+  - `gameEndUnixTime` is `now + simulatedGameDuration`, so `GameStartTime` and
+    `GameEndTime` describe the real game window
+- `protobufClient/profiles.go`
+  - added `simulatedGameDuration = 300 * time.Second` and
+    `postGameBuffer = 15 * time.Second`
+  - replaced the 5–6 s client sleep with `simulatedGameDuration + postGameBuffer`
+
+### 19.3 Why the watchdog had to change
+
+`matchConnectTimeout` (2 min) was doing double duty: the participant-wait deadline
+**and** the cleanup watchdog. A 300 s game would have been deleted from the global
+maps at t = 120 s, so every player's `matchDataMap.Load` at t = 300 s would fail and
+**no rows would be written to `matchHistory`** — a silent failure, because the client
+does not validate the returned history.
+
+The two concerns are now separate:
+
+- the wait loop still gives up after `matchConnectTimeout`;
+- once the match is full, the watchdog is reset to `simulatedGameDuration + matchCleanupGrace`,
+  which covers the game and the database writes;
+- the normal completion path still stops the timer after `tracker.wg.Wait()` and
+  runs `cleanup` exactly once.
+
+A match that never fills still expires after 2 minutes, and `matchHeartBeat` remains
+the hourly safety net.
+
+### 19.4 Why the client waits longer than the game
+
+The client's sleep starts when `/connectToMatch` returns, but the server's 300 s sleep
+starts when the **tenth** participant has registered. The matchmaker hands the same
+match to all ten players at once, so the gap is normally milliseconds; the 15 s
+`postGameBuffer` absorbs that plus the database writes. The result is that the client
+reads `/matchHistory` only after the server has committed the row.
+
+### 19.5 Expected load profile
+
+- Cycle time per player: ~315 s (300 s game + buffer + short API calls).
+- Match rate: ~10,000 players ÷ 10 per match ÷ 315 s ≈ **3 matches/s** sustained
+  (bursty at the start and whenever a wave of games ends).
+- `game_server_queueup_active_players` should sit near **10,000** during steady state,
+  not 0 and not 500,000.
+- Goroutines and map entries stay bounded because each player is in exactly one match
+  at a time. The old client re-queued every ~6 s; it no longer does.
+
+### 19.6 How to apply and verify
+
+```bash
+# game server (Docker)
+cd /home/sawa/devenv/olympus
+sudo docker compose up -d --build game_server
+
+# client
+cd /home/sawa/devenv/protobufClient
+go run . -users 10000
+```
+
+Verify during the run:
+
+```bash
+# should hover around 10000
+watch -n5 'curl -s localhost:8081/metrics | grep ^game_server_queueup_active_players'
+
+# a match appears only after ~300 s
+sudo docker compose exec -T postgres psql -U sawa -d olympus -c \
+  "SELECT count(*) FROM \"matchHistory\";"
+```
+
+After ~5 minutes the count should start growing by roughly 10 rows per match, and
+`gameDuration` should read `300` for the new rows.
+
+### 19.7 Notes
+
+- These edits are **uncommitted** and nothing has been pushed.
+- `go build` and `go vet` pass in both repositories.
+- The 300 s duration is a load-testing choice, not a gameplay feature. Lower
+  `simulatedGameDuration` in both repositories together if a shorter cycle is wanted;
+  changing only one side reintroduces the client/server timing gap.
+
+---
+
+## 20. Post-mortem — the 300-second game change
+
+Section 19 describes *what* changed. This section is the retrospective: why the change
+was needed, what would have broken if the sleep had simply been edited, what the real
+root causes were, and what is still risky.
+
+### 20.1 The request
+
+> "I want the simulated games to be 300 seconds."
+
+That sounds like a one-line change. It was not, because **the simulated game was never
+one clock**. Three different durations described the same event, and none of them
+matched:
+
+| Clock | Before | Owner |
+|---|---|---|
+| Server "game" | `250 ms` | `ConnectPlayerToMatch` |
+| Client "game" | `5–6 s` | `runPlayerCycle` |
+| Match metadata (`gameDuration`) | random `60–359 s` | `generateRandomMatchData` |
+
+The client and server each slept independently, and the metadata described a third,
+imaginary game. There was no shared constant, no comment linking the values, and no
+test that compared them. The only reason this never caused an outage is that the
+server-side work after the sleep did not depend on how long the sleep was — until we
+tried to make it 300 seconds.
+
+### 20.2 What would have happened with only the sleep changed
+
+If `time.Sleep(250 * time.Millisecond)` had been changed to `time.Sleep(300 * time.Second)`
+and nothing else, the system would have failed in three independent ways. The first is
+the dangerous one because it is **silent**.
+
+**Failure 1 — the watchdog deletes the match before the game ends.**
+
+`matchConnectTimeout = 2 * time.Minute` was doing two unrelated jobs:
+
+```go
+// participant-wait deadline
+deadline := time.Now().Add(matchConnectTimeout)
+
+// cleanup watchdog
+t.timer = time.AfterFunc(matchConnectTimeout, func() {
+    t.cleanOnce.Do(cleanup)
+})
+```
+
+With a 300 s sleep:
+
+| Time | Event |
+|---|---|
+| t = 0 | All 10 players connect; goroutines start the 300 s sleep |
+| t = 120 s | Watchdog fires and deletes `activeMatches`, `matchDataMap`, `matchParticipantsMap`, `matchCreationDates`, `waitGroupMap` |
+| t = 300 s | Goroutines wake, `matchDataMap.Load(matchID)` returns `!ok`, and they return **before any DB write** |
+
+Result: **zero `matchHistory` inserts and zero `UpdateProfile` calls**. The client does
+not validate how many matches it received, so `/matchHistory` still returns `200` with
+an empty or stale list. The run looks healthy while the database stays empty. This is
+the worst class of load-test bug: a green dashboard over a dead pipeline.
+
+**Failure 2 — the client re-queues every ~6 seconds.**
+
+`/connectToMatch` responds as soon as the player is registered; the server's sleep is in
+a background goroutine. Changing only the server therefore does not make the client
+wait. Each player would keep cycling every 5–6 s while its previous 300 s server
+goroutine was still alive, so each player would be in roughly 40–50 matches at once:
+
+```
+~170 matches/s × 10 players × 300 s ≈ 500,000 in-flight player goroutines
+```
+
+The fixed gauge would then report **in-flight match participations**, not players —
+ramping toward ~500,000 instead of 10,000. The metric would be "correct" for what it
+measured and useless for what the chart claimed.
+
+**Failure 3 — unbounded growth in the maps.**
+
+Even with the 2-minute watchdog, ~170 matches/s × 120 s ≈ 20,000 match entries would be
+retained, each holding participants, generated results, and JSON. Memory would climb
+through the whole run, and the eventual cleanup wave would add GC pressure on top of
+the already-bursty database writes.
+
+### 20.3 Root causes
+
+Three design mistakes, not one coding mistake:
+
+1. **Timing was implicit and duplicated.** The same logical duration lived in two
+   repositories with no shared source of truth and no cross-reference in comments.
+2. **One timeout served two phases.** `matchConnectTimeout` was both "how long to wait
+   for players" and "how long the match may exist." Those are different questions with
+   different answers, and a single value cannot satisfy both once games are long.
+3. **The metric measured the wrong lifetime.** `game_server_queueup_active_players` was
+   incremented around the HTTP handler, but the handler returns immediately after
+   registration. It was measuring request duration (milliseconds), not game duration
+   (seconds), which is why it read `0` even at 10k users and millions of requests.
+
+### 20.4 The fix
+
+**One duration constant per repository.** The client and server are separate Go modules,
+so the value cannot literally be shared. It is declared once on each side and documented
+as a cross-repo contract:
+
+```go
+// game_server_service/gameServer.go
+simulatedGameDuration = 300 * time.Second
+matchCleanupGrace     = 2 * time.Minute
+
+// protobufClient/profiles.go
+simulatedGameDuration = 300 * time.Second
+postGameBuffer        = 15 * time.Second
+```
+
+**Separate the two phases of the watchdog.** The timer still starts at
+`matchConnectTimeout` so an unfilled match is reaped after 2 minutes. When the tenth
+player arrives, `matchTracker.arrive` resets it to cover the game plus the writes:
+
+```go
+if t.arrived == t.expected {
+    t.timer.Reset(simulatedGameDuration + matchCleanupGrace)
+    t.doneOnce.Do(func() { close(t.done) })
+    return true, false
+}
+```
+
+The normal path is unchanged: the last handler waits on `tracker.wg`, stops the timer,
+and runs `cleanup` exactly once. A match that never fills still expires after 2 minutes,
+and `matchHeartBeat` remains the hourly safety net.
+
+**Align the metadata with reality.** `GameDuration` is now exactly 300, and
+`gameEndUnixTime` is `now + 300 s`, so `GameStartTime`/`GameEndTime` describe the window
+the server actually simulated instead of a random 60–359 s game.
+
+**Wait long enough on the client.** The client sleeps `300 s + 15 s` so its
+`/matchHistory` call happens after the server has committed the row.
+
+**Move the gauge to the match lifetime.** `activeConnections.Inc()`/`Dec()` now bracket
+the per-player match goroutine in `NewPlayerConnection`, so the metric measures players
+in a game rather than milliseconds of handler time.
+
+### 20.5 The remaining race, and why 15 seconds is enough
+
+The server's 300 s starts when the **tenth** participant registers; each client's 300 s
+starts when its own `/connectToMatch` returns. Those are not the same instant:
+
+- If the match fills instantly, the gap is milliseconds.
+- If the match fills slowly, the first player's client can finish its wait before the
+  server's game ends.
+
+The matchmaker forms a full 10-player match and then hands the same `matchID` to all ten
+players at once, so in normal operation the gap is tiny. `postGameBuffer = 15 s` covers
+that gap plus the database writes. It is a **buffer, not a guarantee**: a pathological
+slow fill or a very slow disk could still let a client read before its row exists. The
+correct long-term fix is an explicit readiness signal (see 20.8), not a larger sleep.
+
+### 20.6 Load profile: what 300 s games actually change
+
+| Metric | 5–6 s games (before) | 300 s games (after) |
+|---|---|---|
+| Player cycle | ~6 s | ~315 s |
+| Match rate | ~170 /s | **~3.2 /s** |
+| `matchHistory` inserts | ~1,700 /s | **~32 /s** |
+| Concurrent matches | ~1,000 | ~1,000 |
+| Player goroutines | ~10k | ~10k |
+| Gauge reading | `0` | **~9.5k–10k** |
+| Match metadata duration | random 60–359 s | **300 s** |
+
+The player count is unchanged; the **churn** drops by roughly 50×. That is the point of
+the change: 10,000 players stay connected but spend most of their time in a long game
+instead of hammering matchmaking, the game server, and Postgres every few seconds.
+
+Two consequences are worth stating explicitly:
+
+- **The gauge reads ~9.5k, not exactly 10k**, because each 315 s cycle contains ~15 s of
+  post-game work during which the player is no longer counted. That is accurate, not a
+  bug.
+- **Games end in waves.** The initial 10k players start in a 2-second stagger, so their
+  games end in a 2-second burst, producing a burst of ~10k inserts. The database pool
+  and the 20-row history limit absorb it, but the write pattern is spikier than the
+  steady-state average suggests.
+
+### 20.7 Verification status
+
+| Check | Result |
+|---|---|
+| `gofmt -l` (both repos) | clean |
+| `go build ./...` (both repos) | pass |
+| `go vet ./...` (both repos) | pass |
+| Cross-repo duration values | both `300 * time.Second` |
+| Old short-game references (`250ms`, `5, 6`, `Intn(300)+60`) | none remain |
+| Live 10k run | **not yet run** — requires rebuilding `game_server` in Docker |
+
+The live checks to run after the rebuild are in section 19.6: the gauge should climb
+toward 10k, and new `matchHistory` rows should appear only after ~300 s with
+`gameDuration = 300`.
+
+### 20.8 Lessons
+
+1. **A sleep is not a contract.** When two processes must agree on a duration, write it
+   down in both places, name it identically, and comment on the coupling. A shared
+   config value would be better than a shared comment.
+2. **Never let one timeout serve two phases.** "Wait for participants" and "retain the
+   match" have different failure modes. Splitting them is what made a 300 s game safe.
+3. **Metrics must measure the thing they are named after.** A gauge around a handler
+   measures handler latency, not user state. Always increment at the boundary of the
+   state being counted.
+4. **Silent success is worse than an error.** The server-only change would have produced
+   no errors and no rows. Load tests should assert on *effects* (rows written, matches
+   completed), not just on HTTP status codes.
+5. **A passing test is only valid for the shape it tested.** The previous validation
+   proved 5–6 s games at 10k users. It said nothing about 300 s games, because the
+   duration changes the match rate, the goroutine lifetime, and the DB write pattern.
+6. **Changing one side of a distributed protocol is not a change; it is a new protocol.**
+   Server and client had to move together.
+
+### 20.9 Residual risks and follow-ups
+
+| Risk | Impact | Suggested follow-up |
+|---|---|---|
+| Duration duplicated across two repos | Drift if only one side is edited | Expose it from the server (e.g. `/health` or the connect response) and have the client read it |
+| Fixed `postGameBuffer` | Client can read before a slow DB write | Poll `/matchHistory` for the expected `matchID` with a deadline instead of sleeping |
+| Synchronized game-end waves | Insert bursts at t≈300 s and on each cycle | Add per-player jitter to the client's wait |
+| No timing regression test | Future edit can desynchronize the clocks again | Make the duration overridable (env/flag) and add a short-duration integration test |
+| Gauge counts participants, not unique players | A bug that double-registers a player would inflate it | Keep the duplicate-PUUID rejection; consider a labeled per-match count |
+
+### 20.10 File change index for this change
+
+| File | Change |
+|---|---|
+| `game_server_service/gameServer.go` | `simulatedGameDuration`, `matchCleanupGrace`, 300 s game sleep, watchdog reset on full, gauge moved to match goroutine |
+| `game_server_service/randomizedMatch.go` | `gameDuration = 300`, `gameEndUnixTime = now + 300 s` |
+| `game_server_service/main.go` | gauge removed from the HTTP handler |
+| `game_server_service/metrics.go` | gauge help text corrected |
+| `protobufClient/profiles.go` | `simulatedGameDuration`, `postGameBuffer`, 315 s wait |
+| `BUGS.md` | sections 19 and 20 |
+
+Everything above is in the working tree and **uncommitted**; nothing has been pushed.
+
 ---
 
 *Generated from the actual working-tree diffs of both repositories. Nothing in this

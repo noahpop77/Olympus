@@ -31,7 +31,7 @@ var (
 	activeConnections = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "game_server_queueup_active_players",
-			Help: "Number of players currently connected to /connectToMatch",
+			Help: "Number of players currently in an active match (registered through /connectToMatch and not yet finished)",
 		},
 	)
 

@@ -55,9 +55,9 @@ func main() {
 	}))
 
 	http.HandleFunc("/connectToMatch", instrumentedHandler("/connectToMatch", func(w http.ResponseWriter, r *http.Request) {
-		activeConnections.Inc()
-		defer activeConnections.Dec()
-
+		// The gauge is incremented around the match work inside
+		// NewPlayerConnection, not here: this handler returns as soon as the
+		// player is registered, so counting it here made the gauge read ~0.
 		NewPlayerConnection(w, r, &activeMatches, &matchDataMap, &matchParticipantsMap, &matchCreationDates, &waitGroupMap)
 	}))
 
