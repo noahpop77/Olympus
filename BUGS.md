@@ -1876,6 +1876,10 @@ reads, not a bitmap scan over the player's entire history.
 
 ## 19. Follow-up — 300-second games and the "Players In Game" gauge
 
+> **Update:** the fixed 300 s duration described in this section was later replaced by a
+> per-match duration of 200–400 s (see section 21). The watchdog and gauge fixes are
+> unchanged and still apply.
+
 Two related changes were made after the 10k run: the simulated game was lengthened
 to **300 seconds**, and the `game_server_queueup_active_players` gauge was moved off
 the short-lived HTTP handler. They are described together because they only make
@@ -2009,6 +2013,9 @@ After ~5 minutes the count should start growing by roughly 10 rows per match, an
 ---
 
 ## 20. Post-mortem — the 300-second game change
+
+> **Update:** the duration described here was later made per-match (200–400 s); see
+> section 21. The root-cause analysis and the watchdog/gauge fixes still apply.
 
 Section 19 describes *what* changed. This section is the retrospective: why the change
 was needed, what would have broken if the sleep had simply been edited, what the real
@@ -2243,6 +2250,122 @@ toward 10k, and new `matchHistory` rows should appear only after ~300 s with
 | `BUGS.md` | sections 19 and 20 |
 
 Everything above is in the working tree and **uncommitted**; nothing has been pushed.
+
+---
+
+## 21. Revision — per-match game length (200–400 s)
+
+> This section supersedes the fixed 300 s duration in sections 19 and 20. It does not
+> change the watchdog split, the gauge fix, or the client buffer.
+
+### 21.1 Why vary the length
+
+A fixed 300 s duration fixes more than the game length: it synchronizes the whole run.
+All 1,000 concurrent matches start within the client's 2 s initial stagger, so they all
+end within that same 2 s window. That produces:
+
+- a **queue burst** of ~10,000 players returning to matchmaking at once;
+- a **write burst** of ~10,000 `matchHistory` inserts and profile updates at once;
+- a **sawtooth** in the "Players in match" gauge as whole waves leave and re-enter;
+- repeated re-matching of the same ten players, because their cycles stay aligned.
+
+Giving each match its own length spreads those events over a 200 s window. The average
+load is unchanged; the peaks are much lower.
+
+### 21.2 How the two sides agree on a match's length
+
+The duration must be **per match**, not per player: all ten players in a match must wait
+for the same game, and the server must write the result at the same time. It also must be
+known to both the game server and the client.
+
+Rather than add a protobuf field and regenerate the stubs, both sides derive the duration
+from the one value they already share: the match ID. Match IDs are `MATCH_` plus ten
+random base-36 characters, generated once by the matchmaker and sent unchanged to the game
+server and to all ten players.
+
+```go
+// Identical implementation in olympus/game_server_service/gameServer.go and
+// protobufClient/profiles.go.
+func matchGameDuration(matchID string) time.Duration {
+    h := fnv.New64a()
+    _, _ = h.Write([]byte(matchID))
+
+    spanSeconds := int64((maxGameDuration - minGameDuration) / time.Second)
+    offsetSeconds := int64(h.Sum64() % uint64(spanSeconds+1))
+    return minGameDuration + time.Duration(offsetSeconds)*time.Second
+}
+```
+
+with `minGameDuration = 200 * time.Second` and `maxGameDuration = 400 * time.Second`.
+
+Properties:
+
+- **Deterministic** — the same ID always gives the same duration, on both sides.
+- **Uniform** — a 100,000-ID check produced min 200 s, max 400 s, and five 40 s buckets
+  within 2% of each other.
+- **No new state** — nothing is stored to remember the duration; it is recomputed from
+  the ID.
+- **No protocol change** — the protos are untouched and no extra round trip is needed.
+
+The alternative (the matchmaker picks a duration and includes it in `MatchCreation` /
+`MatchResponse`) would be more explicit but requires editing and regenerating the
+protobuf stubs. The hash approach keeps the wire format unchanged.
+
+### 21.3 What changed
+
+| File | Change |
+|---|---|
+| `game_server_service/gameServer.go` | `minGameDuration`/`maxGameDuration`, `matchGameDuration()`, per-match sleep, tracker stores the match's duration, watchdog reset uses it |
+| `game_server_service/randomizedMatch.go` | `gameDuration` and `gameEndTime` use the per-match duration |
+| `protobufClient/profiles.go` | identical `matchGameDuration()` and bounds, sleep is `matchGameDuration(matchID) + postGameBuffer` |
+| `BUGS.md` | this section and the superseded notes in 19 and 20 |
+
+The metadata is now internally consistent per match: `gameDuration` is the same value the
+server slept for, and `gameStartTime`/`gameEndTime` bracket that window.
+
+### 21.4 Load profile
+
+| Metric | Fixed 300 s | Per-match 200–400 s |
+|---|---|---|
+| Average game | 300 s | 300 s |
+| Game lengths | 1 value | 201 values, uniform |
+| Match ends | one wave every ~315 s | spread over ~200 s |
+| Average match rate | ~3.2 /s | ~3.2 /s |
+| Peak insert rate | ~10k in a 2 s burst | smoothed across the window |
+| Gauge | sawtooth near 10k | smoother, near 10k |
+| Total work | unchanged | unchanged |
+
+The average is deliberately kept at 300 s, so the change is about **variance, not
+throughput**. If a different mean is wanted, shift both bounds together.
+
+### 21.5 Invariants and risks
+
+- **The two helpers must stay identical.** Hash algorithm, bounds, inclusive range, and
+  the `+1` in the modulus are a cross-repo contract. If one side changes and the other
+  does not, clients will read before or after the server writes, and the gauge will
+  drift from the real player count. The comment in both files says so.
+- **`postGameBuffer` is still 15 s.** It covers the gap between the client's connect
+  response and the server's "match full" moment, plus the database writes. Variance does
+  not change that reasoning.
+- **Grouped re-matching remains possible.** Players who finish together may be matched
+  together again, but their next game gets a new ID and therefore a new length, so the
+  groups decorrelate over successive games.
+- **No live run yet.** `gofmt`, `go build`, and `go vet` pass in both repositories; the
+  10k run still requires rebuilding `game_server`.
+
+### 21.6 How to verify the variance
+
+After rebuilding and running the client, confirm that durations are spread rather than
+constant:
+
+```bash
+sudo docker compose exec -T postgres psql -U sawa -d olympus -c \
+  "SELECT \"gameDuration\", count(*) FROM \"matchHistory\"
+   GROUP BY \"gameDuration\" ORDER BY \"gameDuration\"::int LIMIT 10;"
+```
+
+New rows should show many distinct values in the 200–400 range, not a single `300`. The
+gauge should also rise and fall more smoothly than with the fixed duration.
 
 ---
 

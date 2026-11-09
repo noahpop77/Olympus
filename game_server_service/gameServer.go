@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log"
 	"net/http"
@@ -24,9 +25,12 @@ const (
 	// other participants to show up. Without this the old loops spun forever
 	// whenever a match never filled up, leaking a goroutine per player.
 	matchConnectTimeout = 2 * time.Minute
-	// simulatedGameDuration is how long a simulated match lasts. The client
-	// sleeps for the same duration (plus a buffer) before reading the result.
-	simulatedGameDuration = 300 * time.Second
+	// A match's simulated game length is derived from its match ID, in
+	// [minGameDuration, maxGameDuration]. The client derives the same value
+	// from the same ID, so both sides agree without an extra round trip, and
+	// matches do not all start and end in lockstep.
+	minGameDuration = 200 * time.Second
+	maxGameDuration = 400 * time.Second
 	// matchCleanupGrace is added to the watchdog once a match is full so the
 	// maps survive the whole game plus the database writes that follow it.
 	matchCleanupGrace = 2 * time.Minute
@@ -39,6 +43,23 @@ const (
 	// before the janitor removes it.
 	matchRetentionSeconds = 3600
 )
+
+// matchGameDuration returns a stable per-match game length in
+// [minGameDuration, maxGameDuration]. It is a pure function of the match ID so
+// the game server and the client compute the same duration independently; no
+// protocol change or extra request is needed.
+//
+// Match IDs are "MATCH_" plus ten random base-36 characters, so the FNV hash is
+// uniformly distributed across the range and different matches get different
+// lengths.
+func matchGameDuration(matchID string) time.Duration {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(matchID))
+
+	spanSeconds := int64((maxGameDuration - minGameDuration) / time.Second)
+	offsetSeconds := int64(h.Sum64() % uint64(spanSeconds+1))
+	return minGameDuration + time.Duration(offsetSeconds)*time.Second
+}
 
 func PrintBanner(port string) {
 	fmt.Println(`=================================================
@@ -228,10 +249,9 @@ func ConnectPlayerToMatch(activeMatches *sync.Map, matchDataMap *sync.Map, match
 				return fmt.Errorf("invalid participant data for match ID %s", match.MatchID)
 			}
 			if len(randomParticipants) >= matchSize {
-				// Simulate the full game duration. The client sleeps for the
-				// same amount of time before it asks for the match result, so
-				// this must stay in sync with simulatedGameDuration.
-				time.Sleep(simulatedGameDuration)
+				// Simulate this match's game duration. The client derives the
+				// same value from the match ID before it asks for the result.
+				time.Sleep(matchGameDuration(match.MatchID))
 				return nil
 			}
 		}
@@ -452,22 +472,24 @@ func NewPlayerConnectionBackup(w http.ResponseWriter, r *http.Request, activeMat
 // That ordering removes the race in the old implementation where the "tenth"
 // player could call wg.Wait() before the ninth player had called wg.Add(1).
 type matchTracker struct {
-	mu        sync.Mutex
-	expected  int
-	arrived   int
-	seen      map[string]struct{}
-	done      chan struct{}
-	doneOnce  sync.Once
-	wg        sync.WaitGroup
-	cleanOnce sync.Once
-	timer     *time.Timer
+	mu           sync.Mutex
+	expected     int
+	arrived      int
+	seen         map[string]struct{}
+	done         chan struct{}
+	doneOnce     sync.Once
+	wg           sync.WaitGroup
+	cleanOnce    sync.Once
+	timer        *time.Timer
+	gameDuration time.Duration
 }
 
-func newMatchTracker(expected int, cleanup func()) *matchTracker {
+func newMatchTracker(expected int, cleanup func(), gameDuration time.Duration) *matchTracker {
 	t := &matchTracker{
-		expected: expected,
-		done:     make(chan struct{}),
-		seen:     make(map[string]struct{}, expected),
+		expected:     expected,
+		done:         make(chan struct{}),
+		seen:         make(map[string]struct{}, expected),
+		gameDuration: gameDuration,
 	}
 	// Watchdog: if fewer than expected players ever connect, release the maps
 	// instead of leaking them for the lifetime of the process.
@@ -497,9 +519,9 @@ func (t *matchTracker) arrive(puuid string) (isLast bool, duplicate bool) {
 	t.arrived++
 	if t.arrived == t.expected {
 		// The match is full, so the connect window is over. Extend the
-		// watchdog to cover the simulated game and the database writes
-		// instead of deleting the match two minutes after it started.
-		t.timer.Reset(simulatedGameDuration + matchCleanupGrace)
+		// watchdog to cover this match's simulated game and the database
+		// writes instead of deleting the match two minutes after it started.
+		t.timer.Reset(t.gameDuration + matchCleanupGrace)
 		t.doneOnce.Do(func() { close(t.done) })
 		return true, false
 	}
@@ -569,7 +591,7 @@ func NewPlayerConnection(w http.ResponseWriter, r *http.Request, activeMatches *
 		tracker, _ = value.(*matchTracker)
 	}
 	if tracker == nil {
-		candidate := newMatchTracker(expected, cleanup)
+		candidate := newMatchTracker(expected, cleanup, matchGameDuration(matchID))
 		value, loaded := waitGroupMap.LoadOrStore(matchID, candidate)
 		if loaded {
 			// Another handler won the race; drop this candidate's watchdog.
