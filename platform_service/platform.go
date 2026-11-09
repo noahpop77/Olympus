@@ -7,10 +7,25 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/noahpop77/Olympus/platform_service/platformProto"
 	"google.golang.org/protobuf/proto"
+)
+
+const (
+	// dbOpTimeout bounds every database round trip so a slow or saturated
+	// Postgres cannot pin request goroutines indefinitely.
+	dbOpTimeout = 5 * time.Second
+
+	// matchHistoryLimit caps how many matches /matchHistory returns. Without
+	// a limit every call returns the player's entire history, which grows
+	// linearly for the whole run: after ~25 minutes each of 10k players has
+	// ~150 matches (~1 MB of rows), and 10k concurrent calls read several GB
+	// per wave and time out. Real match history is paginated; 20 is a sane
+	// first page and keeps each response around 100-150 KB.
+	matchHistoryLimit = 20
 )
 
 func PrintBanner(port string) {
@@ -49,7 +64,10 @@ func UnpackRequest(w http.ResponseWriter, r *http.Request, protoMessage proto.Me
 var dbPool *pgxpool.Pool
 
 func initDB() {
-	dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable&pool_max_conns=10000"
+	// Keep the pool well below Postgres max_connections (see dbScripts/init.sql
+	// and docker-compose.yaml). The old value of 10000 meant pgxpool would try
+	// to open far more connections than Postgres would ever accept.
+	dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable&pool_max_conns=50&pool_min_conns=5&pool_max_conn_idle_time=1m&pool_max_conn_lifetime=30m"
 
 	var err error
 	dbPool, err = pgxpool.New(context.Background(), dsn)
@@ -59,16 +77,11 @@ func initDB() {
 }
 
 func DatabaseHealthCheck(w http.ResponseWriter, r *http.Request) {
-	// dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable"
-	// conn, err := pgx.Connect(context.Background(), dsn)
-	// if err != nil {
-	// 	log.Printf("Unable to connect to database: %s\n", err)
-	// 	http.Error(w, fmt.Sprintf("Unable to connect to database: %s", err), http.StatusBadRequest)
-	// 	return
-	// }
-	// defer conn.Close(context.Background())
+	ctx, cancel := context.WithTimeout(r.Context(), dbOpTimeout)
+	defer cancel()
+
 	var result string
-	err := dbPool.QueryRow(context.Background(), "SELECT 'ok'").Scan(&result)
+	err := dbPool.QueryRow(ctx, "SELECT 'ok'").Scan(&result)
 	if err != nil {
 		http.Error(w, "Database query failed", http.StatusInternalServerError)
 		return
@@ -80,10 +93,17 @@ func DatabaseHealthCheck(w http.ResponseWriter, r *http.Request) {
 // Gets some riot account stats as specified in the summonerRankedInfo table of the postgres database
 func RiotProfile(w http.ResponseWriter, r *http.Request) {
 	var unpackedRequest platformProto.UserProfile
-	UnpackRequest(w, r, &unpackedRequest)
+	if err := UnpackRequest(w, r, &unpackedRequest); err != nil {
+		log.Printf("Could not unpack the payload: %s\n", err)
+		http.Error(w, "Could not unpack the payload", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), dbOpTimeout)
+	defer cancel()
 
 	// Gets the single row containing the account information, nothing else
-	rows, err := dbPool.Query(context.Background(),
+	rows, err := dbPool.Query(ctx,
 		`SELECT puuid, "riotName", "riotTag", rank, wins, losses FROM "summonerRankedInfo" WHERE "puuid" = $1`, unpackedRequest.Puuid)
 	if err != nil {
 		log.Printf("Failed to fetch summoner ranked information from DB: %v\n", err)
@@ -92,11 +112,25 @@ func RiotProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	// Places the cursor on the
+	// Places the cursor on the first row
 	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			log.Printf("Failed to read summoner ranked information from DB: %v\n", err)
+			http.Error(w, "Database query failed", http.StatusInternalServerError)
+			return
+		}
 		log.Printf("No summmoner data for PUUID: %s\n", unpackedRequest.Puuid)
-		// NOTE: If I return the below response I will get an unmarshal error on the test client
-		//http.Error(w, "No data found", http.StatusNotFound)
+		// Return a valid (empty) protobuf message. Returning http.Error here
+		// makes the test client fail to unmarshal the response.
+		response := &platformProto.UserProfile{Puuid: unpackedRequest.Puuid}
+		data, marshalErr := proto.Marshal(response)
+		if marshalErr != nil {
+			log.Printf("Failed to marshal response: %v\n", marshalErr)
+			http.Error(w, "Failed to marshal response", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-protobuf")
+		w.Write(data)
 		return
 	}
 
@@ -131,22 +165,27 @@ func RiotProfile(w http.ResponseWriter, r *http.Request) {
 
 func GetMatchHistory(w http.ResponseWriter, r *http.Request) {
 	var unpackedRequest platformProto.MatchHistory
-	UnpackRequest(w, r, &unpackedRequest)
+	if err := UnpackRequest(w, r, &unpackedRequest); err != nil {
+		log.Printf("Could not unpack the payload: %s\n", err)
+		http.Error(w, "Could not unpack the payload", http.StatusBadRequest)
+		return
+	}
 
-	// Connect to postgres database
-	// TODO: Make it not hardcoded at some point
-	// dsn := "postgres://sawa:sawa@postgres:5432/olympus?sslmode=disable"
-	// conn, err := pgx.Connect(context.Background(), dsn)
-	// if err != nil {
-	// 	log.Printf("Unable to connect to database: %v\n", err)
-	// }
-	// defer conn.Close(context.Background())
+	ctx, cancel := context.WithTimeout(r.Context(), dbOpTimeout)
+	defer cancel()
 
-	// Actual query sent to postgres
-	rows, err := dbPool.Query(context.Background(),
-		`SELECT "matchID", "gameVer", "gameDuration", "gameCreationTimestamp", "gameEndTimestamp", "teamOnePUUID", "teamTwoPUUID", "participants" FROM "matchHistory" WHERE "puuid" = $1`, unpackedRequest.PlayerPUUID)
+	// Actual query sent to postgres. The ORDER BY + LIMIT keep the cost
+	// bounded no matter how long the player has been in the load test; the
+	// composite (puuid, gameEndTimestamp DESC, matchID DESC) index in
+	// dbScripts/init.sql lets Postgres stop after matchHistoryLimit rows
+	// instead of reading the player's whole history.
+	rows, err := dbPool.Query(ctx,
+		`SELECT "matchID", "gameVer", "gameDuration", "gameCreationTimestamp", "gameEndTimestamp", "teamOnePUUID", "teamTwoPUUID", "participants" FROM "matchHistory" WHERE "puuid" = $1 ORDER BY "gameEndTimestamp" DESC, "matchID" DESC LIMIT $2`,
+		unpackedRequest.PlayerPUUID, matchHistoryLimit)
 	if err != nil {
 		log.Printf("Failed to fetch match history from DB: %v\n", err)
+		http.Error(w, "Failed to fetch match history", http.StatusInternalServerError)
+		return
 	}
 	defer rows.Close()
 
@@ -160,14 +199,14 @@ func GetMatchHistory(w http.ResponseWriter, r *http.Request) {
 		var teamOnePUUID, teamTwoPUUID []string
 		var participantsJSON []byte
 
-		gameStartTime := fmt.Sprintf("%d", gameCreationTimestamp)
-		gameEndTime := fmt.Sprintf("%d", gameEndTimestamp)
-
 		// Scan the fields we searched for into mutable variables with specified types
 		if err := rows.Scan(&matchID, &gameVer, &gameDuration, &gameCreationTimestamp, &gameEndTimestamp, &teamOnePUUID, &teamTwoPUUID, &participantsJSON); err != nil {
 			log.Printf("Failed to scan row: %v\n", err)
 			continue
 		}
+
+		gameStartTime := fmt.Sprintf("%d", gameCreationTimestamp)
+		gameEndTime := fmt.Sprintf("%d", gameEndTimestamp)
 
 		// This part kicked my ass a bit
 		// Due to the very specific structure of the participants field in the PostgreSQL database
@@ -196,7 +235,12 @@ func GetMatchHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rows.Err(); err != nil {
+		// A mid-stream error (most commonly the query deadline) means the
+		// result set is incomplete. Returning a partial 200 makes the client
+		// think the read succeeded; surface it as a real failure instead.
 		log.Printf("Error iterating through rows: %v\n", err)
+		http.Error(w, "Failed to fetch match history", http.StatusInternalServerError)
+		return
 	}
 
 	// Prepare the response
@@ -209,6 +253,8 @@ func GetMatchHistory(w http.ResponseWriter, r *http.Request) {
 	data, err := proto.Marshal(response)
 	if err != nil {
 		log.Printf("Failed to marshal response: %v\n", err)
+		http.Error(w, "Failed to marshal response", http.StatusInternalServerError)
+		return
 	}
 
 	// Send the response back to the client

@@ -8,6 +8,10 @@ services:
     ports:
       - "6379:6379"
     command: ["redis-server", "--loglevel", "nothing"]
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
 
   matchmaking_server:
     build:
@@ -19,6 +23,10 @@ services:
       - matchmaking_redis
     ports:
       - "8080:8080"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
   
   game_server:
     build:
@@ -28,7 +36,10 @@ services:
     restart: always
     ports:
       - "8081:8081"
-    cpuset: "0,1,2,3"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
   
   platform_server:
     build:
@@ -38,7 +49,10 @@ services:
     restart: always
     ports:
       - "8082:8082"
-    cpuset: "0,1,2,3"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     
   prometheus:
     image: prom/prometheus
@@ -55,7 +69,6 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - ./prometheus_data:/prometheus
-    cpuset: "0,1,2,3"
   
   blackbox_exporter:
     image: prom/blackbox-exporter
@@ -70,7 +83,6 @@ services:
     command:
       - "--log.level=error"
       - "--config.file=/etc/blackbox_exporter/blackbox.yml"
-    cpuset: "0,1,2,3"
 
   grafana:
     image: grafana/grafana
@@ -83,7 +95,6 @@ services:
     - GF_LOG_LEVEL=error
     volumes:
       - ./grafana_data:/var/lib/grafana
-    cpuset: "0,1,2,3"
 
   postgres:
     image: postgres:latest
@@ -95,10 +106,17 @@ services:
       POSTGRES_DB: olympus
     ports:
       - "5432:5432"
+    # The init script's ALTER SYSTEM only takes effect on restart; passing the
+    # settings here makes them apply on the very first boot as well.
+    command: ["postgres", "-c", "max_connections=300", "-c", "shared_buffers=256MB"]
+    shm_size: "256mb"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     volumes:
       - postgres_data:/var/lib/postgresql
       - ./dbScripts/init.sql:/docker-entrypoint-initdb.d/init.sql
-    cpuset: "0,1,2,3"
       
 volumes:
   prometheus_data:

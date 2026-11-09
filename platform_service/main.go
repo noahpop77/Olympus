@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -20,12 +21,11 @@ func main() {
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	
-	
+
 	http.HandleFunc("/databaseHealth", func(w http.ResponseWriter, r *http.Request) {
 		DatabaseHealthCheck(w, r)
 	})
-	
+
 	http.HandleFunc("/matchHistory", instrumentedHandler("/matchHistory", func(w http.ResponseWriter, r *http.Request) {
 		GetMatchHistory(w, r)
 	}))
@@ -34,8 +34,18 @@ func main() {
 		RiotProfile(w, r)
 	}))
 
-
 	port := ":8082"
 	PrintBanner(port)
-	log.Fatal(http.ListenAndServe(port, nil))
+
+	// Bound slow clients and half-open connections. Database work is already
+	// bounded by dbOpTimeout inside each handler.
+	srv := &http.Server{
+		Addr:              port,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+	log.Fatal(srv.ListenAndServe())
 }

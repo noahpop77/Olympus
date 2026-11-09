@@ -29,11 +29,10 @@ func main() {
 	var waitGroupMap sync.Map
 	var matchCreationDates sync.Map
 
-	var databaseTransactionMutex sync.Mutex
-
 	initDB()
 
-	// matchHeartBeat(&activeMatches, &matchCreationDates)
+	// Reap matches that were created but never fully consumed.
+	matchHeartBeat(&activeMatches, &matchDataMap, &matchParticipantsMap, &matchCreationDates, &waitGroupMap)
 
 	// Endpoint used to expose prometheus metrics
 	http.Handle("/metrics", promhttp.Handler())
@@ -43,7 +42,12 @@ func main() {
 	})
 
 	http.HandleFunc("/spawnMatch", instrumentedHandler("/spawnMatch", func(w http.ResponseWriter, r *http.Request) {
-		unpackedRequest, _ := UnpackCreationRequest(w, r)
+		unpackedRequest, err := UnpackCreationRequest(w, r)
+		if err != nil {
+			// UnpackCreationRequest has already written the error response.
+			return
+		}
+
 		matchesSpawned.Inc()
 
 		activeMatches.Store(unpackedRequest.MatchID, unpackedRequest)
@@ -54,7 +58,7 @@ func main() {
 		activeConnections.Inc()
 		defer activeConnections.Dec()
 
-		NewPlayerConnection(w, r, &activeMatches, &matchDataMap, &matchParticipantsMap, &databaseTransactionMutex, &waitGroupMap)
+		NewPlayerConnection(w, r, &activeMatches, &matchDataMap, &matchParticipantsMap, &matchCreationDates, &waitGroupMap)
 	}))
 
 	// DEBUG PURPOSES ONLY: Test function for inspecting sync maps
@@ -93,5 +97,17 @@ func main() {
 	// Launch web server
 	port := ":8081"
 	PrintBanner(port)
-	log.Fatal(http.ListenAndServe(port, nil))
+
+	// /connectToMatch acknowledges immediately and records the result in the
+	// background, so a normal write timeout is safe here. The timeouts stop
+	// slow or half-open clients from pinning connections forever.
+	srv := &http.Server{
+		Addr:              port,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+	log.Fatal(srv.ListenAndServe())
 }

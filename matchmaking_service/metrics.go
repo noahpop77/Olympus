@@ -1,7 +1,9 @@
 package main
 
 import (
+	"log"
 	"net/http"
+	"runtime/debug"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -41,10 +43,20 @@ func init() {
 func instrumentedHandler(endpoint string, handler func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		handler(w, r)
-		duration := time.Since(start).Seconds()
 
-		requestsTotal.WithLabelValues(endpoint).Inc()
-		requestDuration.WithLabelValues(endpoint).Observe(duration)
+		// A panic in one handler must not take down the whole service. net/http
+		// already recovers per-connection, but that silently drops the client;
+		// logging here makes the failure visible.
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("panic in %s: %v\n%s", endpoint, rec, debug.Stack())
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+			duration := time.Since(start).Seconds()
+			requestsTotal.WithLabelValues(endpoint).Inc()
+			requestDuration.WithLabelValues(endpoint).Observe(duration)
+		}()
+
+		handler(w, r)
 	}
 }
