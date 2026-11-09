@@ -29,7 +29,7 @@ const (
 	// [minGameDuration, maxGameDuration]. The client derives the same value
 	// from the same ID, so both sides agree without an extra round trip, and
 	// matches do not all start and end in lockstep.
-	minGameDuration = 200 * time.Second
+	minGameDuration = 75 * time.Second
 	maxGameDuration = 400 * time.Second
 	// matchCleanupGrace is added to the watchdog once a match is full so the
 	// maps survive the whole game plus the database writes that follow it.

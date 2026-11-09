@@ -45,7 +45,7 @@ This is a high level design diagram detailing a some requirements for specific c
 - Function and varialbe names will adhere to Camel Case unless this clashes with GO and its use of Pascal Case
 - Variables intended to be constants will be in something like all UPPER CASE
 
-## Project Structur
+## Project Structure
 The basic structure is of creating services will look like the following:
 ```
 .
