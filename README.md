@@ -78,3 +78,21 @@ To generate a new protobuf scheme you can use the followign command after editin
 ```bash
 protoc --go_out=. --go_opt=paths=source_relative party.proto
 ```
+
+## Commands To Run Simulation
+
+#### Olympus
+
+It needs to be noted as well that the two directories `prometheus_data` and `grafana_data` need to have proper file system permissions set so that when its mounted in the docker container, the container will be able to access the data in those directories. (`chmod -R 777 {prometheus_data}` for example works but use consciously).
+
+```
+sudo docker-compose up --build
+```
+
+#### ProtobufClient
+
+You can run it with however many users you wish to simulate.
+
+```
+go run . -users 20000
+```
